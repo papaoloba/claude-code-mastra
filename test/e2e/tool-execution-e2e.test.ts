@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 import { z } from 'zod';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 
 describe('E2E Tool Execution Tests', () => {
   const skipIntegrationTests = !process.env.CLAUDE_CODE_E2E_TEST;
@@ -15,7 +15,8 @@ describe('E2E Tool Execution Tests', () => {
   describe('Real Tool Execution with Claude Code', () => {
     it.skipIf(skipIntegrationTests)('should execute tool and continue conversation', async () => {
       // 簡単な計算ツール
-      const calculatorTool: ToolAction = {
+      const calculatorTool = createTool({
+        id: 'calculator',
         description: 'Perform mathematical calculations',
         inputSchema: z.object({
           expression: z.string().describe('Mathematical expression like "2+2" or "10*5"')
@@ -30,7 +31,7 @@ describe('E2E Tool Execution Tests', () => {
             return { error: 'Invalid expression', expression: context.expression };
           }
         }
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'calculator-agent',
@@ -67,7 +68,8 @@ describe('E2E Tool Execution Tests', () => {
 
     it.skipIf(skipIntegrationTests)('should handle tool with complex parameters', async () => {
       // データベースクエリのシミュレーション
-      const databaseTool: ToolAction = {
+      const databaseTool = createTool({
+        id: 'queryDatabase',
         description: 'Query a mock database',
         inputSchema: z.object({
           table: z.string().describe('Table name'),
@@ -117,7 +119,7 @@ describe('E2E Tool Execution Tests', () => {
             query: context
           };
         }
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'database-agent',
@@ -153,7 +155,8 @@ describe('E2E Tool Execution Tests', () => {
     }, 120000);
 
     it.skipIf(skipIntegrationTests)('should work with streaming', async () => {
-      const timeTool: ToolAction = {
+      const timeTool = createTool({
+        id: 'getCurrentTime',
         description: 'Get current time and date',
         execute: async () => {
           const now = new Date();
@@ -164,7 +167,7 @@ describe('E2E Tool Execution Tests', () => {
             timestamp: now.getTime()
           };
         }
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'time-agent',

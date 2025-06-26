@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 import { z } from 'zod';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import * as claudeCodeModule from '@anthropic-ai/claude-code';
 
 // Claude Code SDKをモック
@@ -18,16 +18,18 @@ describe('Tool Execution Edge Cases - Integration Tests', () => {
 
   describe('Edge cases and error scenarios', () => {
     it('should handle tool call with missing parameters', async () => {
-      const mockTool = vi.fn().mockResolvedValue({ status: 'ok' });
+      const mockExecute = vi.fn().mockResolvedValue({ status: 'ok' });
+      const requiredParamTool = createTool({
+        id: 'requiredParamTool',
+        description: 'Tool with required parameters',
+        inputSchema: z.object({
+          required: z.string(),
+          optional: z.string().optional()
+        }),
+        execute: mockExecute
+      });
       const tools = {
-        requiredParamTool: {
-          description: 'Tool with required parameters',
-          inputSchema: z.object({
-            required: z.string(),
-            optional: z.string().optional()
-          }),
-          execute: mockTool
-        } as ToolAction
+        requiredParamTool
       };
 
       const agent = new ClaudeCodeAgent({
@@ -64,24 +66,28 @@ describe('Tool Execution Edge Cases - Integration Tests', () => {
       const result = await agent.generate('Test missing required param');
 
       // ツールは実行されるが、バリデーションエラーで結果が渡される
-      expect(mockTool).not.toHaveBeenCalled();
+      expect(mockExecute).not.toHaveBeenCalled();
       // 実際の実装では1回の呼び出しで完了する
       expect(mockQuery).toHaveBeenCalledTimes(1);
     });
 
     it('should handle nested tool calls gracefully', async () => {
-      const mockTool1 = vi.fn().mockResolvedValue({ next: 'tool2' });
-      const mockTool2 = vi.fn().mockResolvedValue({ result: 'final' });
+      const mockExecute1 = vi.fn().mockResolvedValue({ next: 'tool2' });
+      const mockExecute2 = vi.fn().mockResolvedValue({ result: 'final' });
       
+      const tool1 = createTool({
+        id: 'tool1',
+        description: 'First tool',
+        execute: mockExecute1
+      });
+      const tool2 = createTool({
+        id: 'tool2',
+        description: 'Second tool',
+        execute: mockExecute2
+      });
       const tools = {
-        tool1: {
-          description: 'First tool',
-          execute: mockTool1
-        } as ToolAction,
-        tool2: {
-          description: 'Second tool',
-          execute: mockTool2
-        } as ToolAction
+        tool1,
+        tool2
       };
 
       const agent = new ClaudeCodeAgent({
@@ -133,8 +139,8 @@ describe('Tool Execution Edge Cases - Integration Tests', () => {
 
       const result = await agent.generate('Execute nested tools');
 
-      expect(mockTool1).toHaveBeenCalledTimes(1);
-      expect(mockTool2).toHaveBeenCalledTimes(1);
+      expect(mockExecute1).toHaveBeenCalledTimes(1);
+      expect(mockExecute2).toHaveBeenCalledTimes(1);
       expect(result.text).toContain('All done!');
     });
 
@@ -144,10 +150,11 @@ describe('Tool Execution Edge Cases - Integration Tests', () => {
         instructions: 'Test malformed JSON',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          testTool: {
+          testTool: createTool({
+            id: 'testTool',
             description: 'Test tool',
             execute: vi.fn()
-          } as ToolAction
+          })
         }
       });
 
@@ -184,19 +191,22 @@ describe('Tool Execution Edge Cases - Integration Tests', () => {
     });
 
     it('should handle tool execution timeout', async () => {
-      const slowTool = vi.fn().mockImplementation(() => 
+      const mockSlowExecute = vi.fn().mockImplementation(() => 
         new Promise(resolve => setTimeout(() => resolve({ done: true }), 5000))
       );
+
+      const slowTool = createTool({
+        id: 'slowTool',
+        description: 'Slow tool',
+        execute: mockSlowExecute
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'timeout-agent',
         instructions: 'Test timeout',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          slowTool: {
-            description: 'Slow tool',
-            execute: slowTool
-          } as ToolAction
+          slowTool
         },
         claudeCodeOptions: {
           timeout: 1000 // 最小値の1秒
@@ -228,20 +238,23 @@ describe('Tool Execution Edge Cases - Integration Tests', () => {
     });
 
     it('should handle concurrent tool calls', async () => {
-      const mockTool = vi.fn().mockImplementation(({ context }) => 
+      const mockExecute = vi.fn().mockImplementation(({ context }) => 
         Promise.resolve({ input: context.value, doubled: context.value * 2 })
       );
+
+      const double = createTool({
+        id: 'double',
+        description: 'Double a number',
+        inputSchema: z.object({ value: z.number() }),
+        execute: mockExecute
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'concurrent-agent',
         instructions: 'Test concurrent tools',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          double: {
-            description: 'Double a number',
-            inputSchema: z.object({ value: z.number() }),
-            execute: mockTool
-          } as ToolAction
+          double
         }
       });
 
@@ -275,7 +288,7 @@ Second: \`\`\`json
 
       // 現在の実装では最初のツール呼び出しのみ検出される
       // しかし、このテストケースでは複数のJSONブロックは検出されない
-      expect(mockTool).toHaveBeenCalledTimes(0);
+      expect(mockExecute).toHaveBeenCalledTimes(0);
       // 複数ツール呼び出しの同時実行は今後の改善点
     });
 
@@ -285,10 +298,11 @@ Second: \`\`\`json
         instructions: 'Test custom prompt',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          testTool: {
+          testTool: createTool({
+            id: 'testTool',
             description: 'Test tool',
             execute: vi.fn()
-          } as ToolAction
+          })
         },
         claudeCodeOptions: {
           customSystemPrompt: 'This is a custom system prompt'
@@ -320,17 +334,20 @@ Second: \`\`\`json
 
   describe('Tool execution in streaming mode', () => {
     it('should handle tool errors in streaming', async () => {
-      const failingTool = vi.fn().mockRejectedValue(new Error('Tool failed'));
+      const mockFailingExecute = vi.fn().mockRejectedValue(new Error('Tool failed'));
+      
+      const failingTool = createTool({
+        id: 'failingTool',
+        description: 'Failing tool',
+        execute: mockFailingExecute
+      });
       
       const agent = new ClaudeCodeAgent({
         name: 'stream-error-agent',
         instructions: 'Test streaming errors',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          failingTool: {
-            description: 'Failing tool',
-            execute: failingTool
-          } as ToolAction
+          failingTool
         }
       });
 
@@ -372,7 +389,7 @@ Second: \`\`\`json
         chunks.push(chunk);
       }
 
-      expect(failingTool).toHaveBeenCalledOnce();
+      expect(mockFailingExecute).toHaveBeenCalledOnce();
       const text = await streamResult.text;
       expect(text).toContain('different approach');
     });

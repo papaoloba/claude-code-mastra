@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import * as claudeCodeModule from '@anthropic-ai/claude-code';
 
 // Claude Code SDKをモック
@@ -17,22 +17,25 @@ describe('Tool Execution Performance - Integration Tests', () => {
 
   describe('Performance characteristics', () => {
     it('should execute tools without blocking the event loop', async () => {
-      const asyncTool = vi.fn().mockImplementation(() => 
+      const mockExecute = vi.fn().mockImplementation(() => 
         new Promise(resolve => {
           // 非同期処理をシミュレート
           setImmediate(() => resolve({ result: 'async' }));
         })
       );
 
+      const asyncTool = createTool({
+        id: 'asyncTool',
+        description: 'Async tool',
+        execute: mockExecute
+      });
+
       const agent = new ClaudeCodeAgent({
         name: 'async-agent',
         instructions: 'Test async',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          asyncTool: {
-            description: 'Async tool',
-            execute: asyncTool
-          } as ToolAction
+          asyncTool
         }
       });
 
@@ -57,22 +60,25 @@ describe('Tool Execution Performance - Integration Tests', () => {
       await agent.generate('Test async execution');
       const endTime = Date.now();
 
-      expect(asyncTool).toHaveBeenCalled();
+      expect(mockExecute).toHaveBeenCalled();
       expect(endTime - startTime).toBeLessThan(100); // 非同期なので速い
     });
 
     it('should handle rapid sequential tool calls efficiently', async () => {
-      const fastTool = vi.fn().mockResolvedValue({ processed: true });
+      const mockExecute = vi.fn().mockResolvedValue({ processed: true });
+      
+      const process = createTool({
+        id: 'process',
+        description: 'Process data',
+        execute: mockExecute
+      });
       
       const agent = new ClaudeCodeAgent({
         name: 'rapid-agent',
         instructions: 'Test rapid calls',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          process: {
-            description: 'Process data',
-            execute: fastTool
-          } as ToolAction
+          process
         }
       });
 
@@ -109,13 +115,13 @@ describe('Tool Execution Performance - Integration Tests', () => {
       const result = await agent.generate('Process multiple items quickly');
       const endTime = Date.now();
 
-      expect(fastTool).toHaveBeenCalledTimes(3);
+      expect(mockExecute).toHaveBeenCalledTimes(3);
       expect(result.text).toContain('All items processed!');
       expect(endTime - startTime).toBeLessThan(500); // 3つのツール呼び出しでも高速
     });
 
     it('should clean up resources after tool execution', async () => {
-      const resourceTool = vi.fn().mockImplementation(() => {
+      const mockExecute = vi.fn().mockImplementation(() => {
         // リソースを使用するツールをシミュレート
         const resource = { data: Buffer.alloc(1024 * 1024) }; // 1MB
         return Promise.resolve({ 
@@ -124,15 +130,18 @@ describe('Tool Execution Performance - Integration Tests', () => {
         });
       });
 
+      const useResource = createTool({
+        id: 'useResource',
+        description: 'Use resources',
+        execute: mockExecute
+      });
+
       const agent = new ClaudeCodeAgent({
         name: 'resource-agent',
         instructions: 'Test resources',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          useResource: {
-            description: 'Use resources',
-            execute: resourceTool
-          } as ToolAction
+          useResource
         }
       });
 
@@ -167,25 +176,28 @@ describe('Tool Execution Performance - Integration Tests', () => {
       const finalMemory = process.memoryUsage().heapUsed;
       const memoryDiff = finalMemory - initialMemory;
       
-      expect(resourceTool).toHaveBeenCalled();
+      expect(mockExecute).toHaveBeenCalled();
       // メモリリークがないことを確認（1MBのバッファが解放されている）
       expect(memoryDiff).toBeLessThan(500 * 1024); // 500KB以下の増加
     });
 
     it('should maintain tool execution history efficiently', async () => {
-      const historyTool = vi.fn().mockImplementation(({ context }) => 
+      const mockExecute = vi.fn().mockImplementation(({ context }) => 
         Promise.resolve({ processed: context.value })
       );
+
+      const track = createTool({
+        id: 'track',
+        description: 'Track values',
+        execute: mockExecute
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'history-agent',
         instructions: 'Test history',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          track: {
-            description: 'Track values',
-            execute: historyTool
-          } as ToolAction
+          track
         }
       });
 
@@ -238,17 +250,20 @@ describe('Tool Execution Performance - Integration Tests', () => {
 
   describe('Streaming performance', () => {
     it('should stream tool results efficiently', async () => {
-      const streamTool = vi.fn().mockResolvedValue({ streamed: true });
+      const mockExecute = vi.fn().mockResolvedValue({ streamed: true });
+      
+      const stream = createTool({
+        id: 'stream',
+        description: 'Stream data',
+        execute: mockExecute
+      });
       
       const agent = new ClaudeCodeAgent({
         name: 'stream-perf-agent',
         instructions: 'Test streaming performance',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          stream: {
-            description: 'Stream data',
-            execute: streamTool
-          } as ToolAction
+          stream
         }
       });
 
@@ -301,7 +316,7 @@ describe('Tool Execution Performance - Integration Tests', () => {
 
       // ストリーミングでは実際のチャンク数は異なる可能性がある
       expect(chunks.length).toBeGreaterThan(0);
-      expect(streamTool).toHaveBeenCalledOnce();
+      expect(mockExecute).toHaveBeenCalledOnce();
       
       // チャンクが順次届いていることを確認（タイムスタンプがある場合）
       if (chunkTimestamps.length > 1) {

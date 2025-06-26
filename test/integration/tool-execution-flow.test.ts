@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 import { z } from 'zod';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import * as claudeCodeModule from '@anthropic-ai/claude-code';
 
 // Claude Code SDKをモック
@@ -18,15 +18,17 @@ describe('Tool Execution Flow - Integration Tests', () => {
 
   describe('Tool call detection and execution', () => {
     it('should detect tool call in response and execute it', async () => {
-      const mockCalculator = vi.fn().mockResolvedValue({ result: 42 });
+      const mockExecute = vi.fn().mockResolvedValue({ result: 42 });
+      const calculator = createTool({
+        id: 'calculator',
+        description: 'Calculate math expressions',
+        inputSchema: z.object({
+          expression: z.string()
+        }),
+        execute: mockExecute
+      });
       const tools = {
-        calculator: {
-          description: 'Calculate math expressions',
-          inputSchema: z.object({
-            expression: z.string()
-          }),
-          execute: mockCalculator
-        } as ToolAction
+        calculator
       };
 
       const agent = new ClaudeCodeAgent({
@@ -96,7 +98,7 @@ describe('Tool Execution Flow - Integration Tests', () => {
       const result = await agent.generate('What is 10 times 4.2?');
 
       // ツールが実行されたことを確認
-      expect(mockCalculator).toHaveBeenCalledWith(
+      expect(mockExecute).toHaveBeenCalledWith(
         { context: { expression: '10 * 4.2' } },
         expect.objectContaining({
           toolCallId: expect.stringMatching(/^tool_/),
@@ -118,21 +120,25 @@ describe('Tool Execution Flow - Integration Tests', () => {
     });
 
     it('should handle multiple tool calls in sequence', async () => {
-      const mockWeather = vi.fn().mockResolvedValue({ temperature: 22, conditions: 'Sunny' });
-      const mockTime = vi.fn().mockResolvedValue({ time: '2024-01-15 10:30:00' });
+      const mockWeatherExecute = vi.fn().mockResolvedValue({ temperature: 22, conditions: 'Sunny' });
+      const mockTimeExecute = vi.fn().mockResolvedValue({ time: '2024-01-15 10:30:00' });
 
+      const weather = createTool({
+        id: 'weather',
+        description: 'Get weather information',
+        inputSchema: z.object({
+          city: z.string()
+        }),
+        execute: mockWeatherExecute
+      });
+      const currentTime = createTool({
+        id: 'currentTime',
+        description: 'Get current time',
+        execute: mockTimeExecute
+      });
       const tools = {
-        weather: {
-          description: 'Get weather information',
-          inputSchema: z.object({
-            city: z.string()
-          }),
-          execute: mockWeather
-        } as ToolAction,
-        currentTime: {
-          description: 'Get current time',
-          execute: mockTime
-        } as ToolAction
+        weather,
+        currentTime
       };
 
       const agent = new ClaudeCodeAgent({
@@ -223,8 +229,8 @@ describe('Tool Execution Flow - Integration Tests', () => {
       const result = await agent.generate('What time is it and what is the weather in Tokyo?');
 
       // 両方のツールが実行されたことを確認
-      expect(mockTime).toHaveBeenCalledOnce();
-      expect(mockWeather).toHaveBeenCalledWith(
+      expect(mockTimeExecute).toHaveBeenCalledOnce();
+      expect(mockWeatherExecute).toHaveBeenCalledWith(
         { context: { city: 'Tokyo' } },
         expect.any(Object)
       );
@@ -240,16 +246,18 @@ describe('Tool Execution Flow - Integration Tests', () => {
     });
 
     it('should handle tool execution errors gracefully', async () => {
-      const mockFailingTool = vi.fn().mockRejectedValue(new Error('API connection failed'));
+      const mockExecute = vi.fn().mockRejectedValue(new Error('API connection failed'));
 
+      const apiCall = createTool({
+        id: 'apiCall',
+        description: 'Make API call',
+        inputSchema: z.object({
+          endpoint: z.string()
+        }),
+        execute: mockExecute
+      });
       const tools = {
-        apiCall: {
-          description: 'Make API call',
-          inputSchema: z.object({
-            endpoint: z.string()
-          }),
-          execute: mockFailingTool
-        } as ToolAction
+        apiCall
       };
 
       const agent = new ClaudeCodeAgent({
@@ -310,7 +318,7 @@ describe('Tool Execution Flow - Integration Tests', () => {
       const result = await agent.generate('Get user data from the API');
 
       // ツールが実行を試みたことを確認
-      expect(mockFailingTool).toHaveBeenCalledWith(
+      expect(mockExecute).toHaveBeenCalledWith(
         { context: { endpoint: '/users' } },
         expect.any(Object)
       );
@@ -327,13 +335,15 @@ describe('Tool Execution Flow - Integration Tests', () => {
     });
 
     it('should respect iteration limit to prevent infinite loops', async () => {
-      const mockTool = vi.fn().mockResolvedValue({ data: 'result' });
+      const mockExecute = vi.fn().mockResolvedValue({ data: 'result' });
 
+      const infiniteTool = createTool({
+        id: 'infiniteTool',
+        description: 'A tool that always needs to be called again',
+        execute: mockExecute
+      });
       const tools = {
-        infiniteTool: {
-          description: 'A tool that always needs to be called again',
-          execute: mockTool
-        } as ToolAction
+        infiniteTool
       };
 
       const agent = new ClaudeCodeAgent({
@@ -374,22 +384,24 @@ describe('Tool Execution Flow - Integration Tests', () => {
       await agent.generate('Start the infinite loop');
 
       // ツールが最大5回まで実行されることを確認（maxIterations = 5）
-      expect(mockTool).toHaveBeenCalledTimes(5);
+      expect(mockExecute).toHaveBeenCalledTimes(5);
       expect(mockQuery).toHaveBeenCalledTimes(5); // 各イテレーションで1回呼ばれる
     });
   });
 
   describe('Streaming with tool execution', () => {
     it('should handle tool calls during streaming', async () => {
-      const mockCalculator = vi.fn().mockResolvedValue({ result: 100 });
+      const mockExecute2 = vi.fn().mockResolvedValue({ result: 100 });
+      const calculator = createTool({
+        id: 'calculator',
+        description: 'Calculate math expressions',
+        inputSchema: z.object({
+          expression: z.string()
+        }),
+        execute: mockExecute2
+      });
       const tools = {
-        calculator: {
-          description: 'Calculate math expressions',
-          inputSchema: z.object({
-            expression: z.string()
-          }),
-          execute: mockCalculator
-        } as ToolAction
+        calculator
       };
 
       const agent = new ClaudeCodeAgent({
@@ -438,7 +450,7 @@ describe('Tool Execution Flow - Integration Tests', () => {
       }
 
       // ツールが実行されたことを確認
-      expect(mockCalculator).toHaveBeenCalledWith(
+      expect(mockExecute2).toHaveBeenCalledWith(
         { context: { expression: '50 + 50' } },
         expect.any(Object)
       );

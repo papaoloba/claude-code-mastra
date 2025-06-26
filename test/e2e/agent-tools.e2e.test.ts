@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 import { z } from 'zod';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 
 describe('E2E Agent Tools Tests', () => {
   const skipIntegrationTests = !process.env.CLAUDE_CODE_E2E_TEST;
@@ -15,7 +15,8 @@ describe('E2E Agent Tools Tests', () => {
   describe('Tool Integration with Claude Code', () => {
     it.skipIf(skipIntegrationTests)('should use custom tools to enhance responses', async () => {
       // カスタムツールの定義
-      const calculatorTool: ToolAction = {
+      const calculatorTool = createTool({
+        id: 'calculator',
         description: 'Perform basic mathematical calculations',
         inputSchema: z.object({
           expression: z.string().describe('Mathematical expression to evaluate'),
@@ -36,7 +37,7 @@ describe('E2E Agent Tools Tests', () => {
             };
           }
         }
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'calculator-agent',
@@ -69,33 +70,38 @@ describe('E2E Agent Tools Tests', () => {
 
     it.skipIf(skipIntegrationTests)('should handle multiple tools', async () => {
       // 複数のツールを定義
+      const getCurrentTime = createTool({
+        id: 'getCurrentTime',
+        description: 'Get the current date and time',
+        execute: async () => {
+          const now = new Date();
+          return {
+            iso: now.toISOString(),
+            formatted: now.toLocaleString(),
+            timestamp: now.getTime()
+          };
+        }
+      });
+      
+      const wordCounter = createTool({
+        id: 'wordCounter',
+        description: 'Count words and characters in a text',
+        inputSchema: z.object({
+          text: z.string().describe('Text to analyze')
+        }),
+        execute: async ({ context }) => {
+          const words = context.text.split(/\s+/).filter(word => word.length > 0);
+          return {
+            wordCount: words.length,
+            characterCount: context.text.length,
+            characterCountNoSpaces: context.text.replace(/\s/g, '').length
+          };
+        }
+      });
+      
       const tools = {
-        getCurrentTime: {
-          description: 'Get the current date and time',
-          execute: async () => {
-            const now = new Date();
-            return {
-              iso: now.toISOString(),
-              formatted: now.toLocaleString(),
-              timestamp: now.getTime()
-            };
-          }
-        } as ToolAction,
-        
-        wordCounter: {
-          description: 'Count words and characters in a text',
-          inputSchema: z.object({
-            text: z.string().describe('Text to analyze')
-          }),
-          execute: async ({ context }) => {
-            const words = context.text.split(/\s+/).filter(word => word.length > 0);
-            return {
-              wordCount: words.length,
-              characterCount: context.text.length,
-              characterCountNoSpaces: context.text.replace(/\s/g, '').length
-            };
-          }
-        } as ToolAction
+        getCurrentTime,
+        wordCounter
       };
 
       const agent = new ClaudeCodeAgent({
@@ -130,7 +136,8 @@ describe('E2E Agent Tools Tests', () => {
     }, 60000);
 
     it.skipIf(skipIntegrationTests)('should execute tool directly', async () => {
-      const mockApiTool: ToolAction = {
+      const mockApiTool = createTool({
+        id: 'mockApi',
         description: 'Mock API call',
         inputSchema: z.object({
           endpoint: z.string(),
@@ -145,7 +152,7 @@ describe('E2E Agent Tools Tests', () => {
             }
           };
         }
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'api-agent',
@@ -175,7 +182,8 @@ describe('E2E Agent Tools Tests', () => {
     }, 30000);
 
     it.skipIf(skipIntegrationTests)('should validate tool inputs', async () => {
-      const strictTool: ToolAction = {
+      const strictTool = createTool({
+        id: 'validateUser',
         description: 'Tool with strict input validation',
         inputSchema: z.object({
           name: z.string().min(3).max(50),
@@ -185,7 +193,7 @@ describe('E2E Agent Tools Tests', () => {
         execute: async ({ context }) => {
           return { success: true, data: context };
         }
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'validation-agent',
@@ -241,13 +249,14 @@ describe('E2E Agent Tools Tests', () => {
         expect(agent.getToolNames()).toHaveLength(0);
 
         // ツールを追加
-        const echoTool: ToolAction = {
+        const echoTool = createTool({
+          id: 'echo',
           description: 'Echo back the input',
           inputSchema: z.object({
             message: z.string()
           }),
           execute: async ({ context }) => ({ echo: context.message })
-        };
+        });
 
         agent.addTool('echo', echoTool);
         expect(agent.getToolNames()).toContain('echo');

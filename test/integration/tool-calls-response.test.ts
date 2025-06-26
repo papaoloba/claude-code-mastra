@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 import { z } from 'zod';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 import * as claudeCodeModule from '@anthropic-ai/claude-code';
 
 // Claude Code SDKをモック
@@ -18,15 +18,18 @@ describe('Tool Calls Response - Integration Tests', () => {
 
   describe('toolCalls field in response', () => {
     it('should return toolCalls when tools are executed', async () => {
-      const mockTool = vi.fn().mockResolvedValue({ result: 'success', value: 42 });
+      const mockExecute = vi.fn().mockResolvedValue({ result: 'success', value: 42 });
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({
+          input: z.string()
+        }),
+        execute: mockExecute
+      });
+      
       const tools = {
-        testTool: {
-          description: 'Test tool',
-          inputSchema: z.object({
-            input: z.string()
-          }),
-          execute: mockTool
-        } as ToolAction
+        testTool
       };
 
       const agent = new ClaudeCodeAgent({
@@ -115,18 +118,24 @@ describe('Tool Calls Response - Integration Tests', () => {
     });
 
     it('should handle multiple tool calls in sequence', async () => {
-      const mockTool1 = vi.fn().mockResolvedValue({ data: 'first' });
-      const mockTool2 = vi.fn().mockResolvedValue({ data: 'second' });
+      const mockExecute1 = vi.fn().mockResolvedValue({ data: 'first' });
+      const mockExecute2 = vi.fn().mockResolvedValue({ data: 'second' });
+      
+      const tool1 = createTool({
+        id: 'tool1',
+        description: 'First tool',
+        execute: mockExecute1
+      });
+      
+      const tool2 = createTool({
+        id: 'tool2',
+        description: 'Second tool',
+        execute: mockExecute2
+      });
       
       const tools = {
-        tool1: {
-          description: 'First tool',
-          execute: mockTool1
-        } as ToolAction,
-        tool2: {
-          description: 'Second tool',
-          execute: mockTool2
-        } as ToolAction
+        tool1,
+        tool2
       };
 
       const agent = new ClaudeCodeAgent({
@@ -188,17 +197,20 @@ describe('Tool Calls Response - Integration Tests', () => {
 
   describe('streaming with toolCalls', () => {
     it('should return toolCalls promise in streaming', async () => {
-      const mockTool = vi.fn().mockResolvedValue({ streamed: true });
+      const mockExecute = vi.fn().mockResolvedValue({ streamed: true });
+      
+      const streamTool = createTool({
+        id: 'streamTool',
+        description: 'Streaming tool',
+        execute: mockExecute
+      });
       
       const agent = new ClaudeCodeAgent({
         name: 'stream-toolcalls-agent',
         instructions: 'Test streaming with tools',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          streamTool: {
-            description: 'Streaming tool',
-            execute: mockTool
-          } as ToolAction
+          streamTool
         }
       });
 

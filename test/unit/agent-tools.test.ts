@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 import { z } from 'zod';
 import type { SDKMessage } from '@anthropic-ai/claude-code';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
+import * as claudeCodeModule from '@anthropic-ai/claude-code';
 
 // Claude Code SDKをモック
 vi.mock('@anthropic-ai/claude-code', () => ({
@@ -19,21 +20,21 @@ vi.mock('@mastra/core', () => ({
   }
 }));
 
-const { query } = await import('@anthropic-ai/claude-code');
-const mockQuery = vi.mocked(query);
-
 describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
+  const mockQuery = claudeCodeModule.query as any;
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('Tool Definition', () => {
     it('should accept tools in the constructor', () => {
-      const mockTool: ToolAction<any, any> = {
+      const mockTool = createTool({
+        id: 'testTool',
         description: 'A test tool',
         inputSchema: z.object({
           message: z.string()
@@ -41,7 +42,7 @@ describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
         execute: async ({ context }) => {
           return { result: `Processed: ${context.message}` };
         }
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
@@ -58,16 +59,18 @@ describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
     });
 
     it('should accept multiple tools', () => {
-      const tool1: ToolAction = {
+      const tool1 = createTool({
+        id: 'tool1',
         description: 'Tool 1',
         execute: async () => ({ result: 'Tool 1 result' })
-      };
+      });
 
-      const tool2: ToolAction = {
+      const tool2 = createTool({
+        id: 'tool2',
         description: 'Tool 2',
         inputSchema: z.object({ input: z.string() }),
         execute: async ({ context }) => ({ result: context.input })
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
@@ -93,69 +96,74 @@ describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
       });
 
       const tools = agent.getTools();
-      expect(tools).toEqual({});
+      expect(Object.keys(tools)).toHaveLength(0);
     });
   });
 
   describe('Tool Execution', () => {
     it('should execute tools when called', async () => {
-      const mockExecute = vi.fn().mockResolvedValue({ result: 'Tool executed' });
-      const mockTool: ToolAction = {
-        description: 'Execute this tool',
+      const mockExecute = vi.fn().mockResolvedValue({ result: 'success' });
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
         inputSchema: z.object({
           input: z.string()
         }),
         execute: mockExecute
-      };
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
         instructions: 'Test instructions',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          executeTool: mockTool
+          testTool
         }
       });
 
-      // ツールの実行をテスト
-      const result = await agent.executeTool('executeTool', { input: 'test input' });
-      
+      const result = await agent.executeTool('testTool', { input: 'test data' });
+
       expect(mockExecute).toHaveBeenCalledWith(
-        { context: { input: 'test input' } },
-        expect.anything()
+        { context: { input: 'test data' } },
+        expect.objectContaining({
+          toolCallId: expect.stringMatching(/^tool_/),
+          messages: []
+        })
       );
-      expect(result).toEqual({ result: 'Tool executed' });
+      expect(result).toEqual({ result: 'success' });
     });
 
     it('should validate input schema before execution', async () => {
-      const mockTool: ToolAction = {
-        description: 'Tool with schema',
+      const mockExecute = vi.fn();
+      const strictTool = createTool({
+        id: 'strictTool',
+        description: 'Tool with strict input validation',
         inputSchema: z.object({
-          name: z.string(),
-          age: z.number().min(0)
+          name: z.string().min(3),
+          age: z.number().positive()
         }),
-        execute: async ({ context }) => ({ 
-          message: `Hello ${context.name}, you are ${context.age} years old` 
-        })
-      };
+        execute: mockExecute
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
         instructions: 'Test instructions',
         model: 'claude-3-5-sonnet-20241022',
         tools: {
-          greetTool: mockTool
+          strictTool
         }
       });
 
       // 無効な入力でエラーになることを確認
       await expect(
-        agent.executeTool('greetTool', { name: 'John', age: -5 })
+        agent.executeTool('strictTool', { name: 'Jo', age: -5 })
       ).rejects.toThrow();
 
+      expect(mockExecute).not.toHaveBeenCalled();
+
       // 有効な入力で成功することを確認
-      const result = await agent.executeTool('greetTool', { name: 'John', age: 30 });
-      expect(result).toEqual({ message: 'Hello John, you are 30 years old' });
+      await agent.executeTool('strictTool', { name: 'John', age: 25 });
+      expect(mockExecute).toHaveBeenCalled();
     });
 
     it('should throw error for non-existent tool', async () => {
@@ -174,70 +182,90 @@ describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
 
   describe('Tool Information', () => {
     it('should provide tool descriptions', () => {
-      const tools = {
-        weatherTool: {
-          description: 'Get weather information for a city',
-          inputSchema: z.object({
-            city: z.string()
-          })
-        } as ToolAction,
-        calculatorTool: {
-          description: 'Perform mathematical calculations',
-          inputSchema: z.object({
-            expression: z.string()
-          })
-        } as ToolAction
-      };
+      const describedTool1 = createTool({
+        id: 'describedTool1',
+        description: 'This tool does something',
+        execute: vi.fn()
+      });
+
+      const describedTool2 = createTool({
+        id: 'describedTool2',
+        description: 'This tool does something else',
+        execute: vi.fn()
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
         instructions: 'Test instructions',
         model: 'claude-3-5-sonnet-20241022',
-        tools
+        tools: {
+          describedTool1,
+          describedTool2
+        }
       });
 
-      const toolDescriptions = agent.getToolDescriptions();
-      expect(toolDescriptions).toEqual({
-        weatherTool: 'Get weather information for a city',
-        calculatorTool: 'Perform mathematical calculations'
+      const descriptions = agent.getToolDescriptions();
+      expect(descriptions).toEqual({
+        describedTool1: 'This tool does something',
+        describedTool2: 'This tool does something else'
       });
     });
 
     it('should list available tool names', () => {
-      const tools = {
-        tool1: { description: 'Tool 1' } as ToolAction,
-        tool2: { description: 'Tool 2' } as ToolAction,
-        tool3: { description: 'Tool 3' } as ToolAction
-      };
+      const alpha = createTool({
+        id: 'alpha',
+        description: 'Alpha tool',
+        execute: vi.fn()
+      });
+
+      const beta = createTool({
+        id: 'beta',
+        description: 'Beta tool',
+        execute: vi.fn()
+      });
+
+      const gamma = createTool({
+        id: 'gamma',
+        description: 'Gamma tool',
+        execute: vi.fn()
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
         instructions: 'Test instructions',
         model: 'claude-3-5-sonnet-20241022',
-        tools
+        tools: {
+          alpha,
+          beta,
+          gamma
+        }
       });
 
       const toolNames = agent.getToolNames();
-      expect(toolNames).toEqual(['tool1', 'tool2', 'tool3']);
+      expect(toolNames).toEqual(['alpha', 'beta', 'gamma']);
     });
   });
 
   describe('Integration with Claude Code', () => {
     it('should include tool information in agent instructions', async () => {
-      const tools = {
-        searchTool: {
-          description: 'Search for information',
-          inputSchema: z.object({
-            query: z.string()
-          })
-        } as ToolAction
-      };
+      const searchTool = createTool({
+        id: 'searchTool',
+        description: 'Search for information',
+        inputSchema: z.object({
+          query: z.string()
+        }),
+        execute: async () => ({
+          results: []
+        })
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
+        instructions: 'Test instructions',
         model: 'claude-3-5-sonnet-20241022',
-        tools,
+        tools: {
+          searchTool
+        },
         claudeCodeOptions: {
           appendSystemPrompt: 'Always use tools when appropriate.'
         }
@@ -272,42 +300,66 @@ describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
         instructions: 'Test instructions',
-        model: 'claude-3-5-sonnet-20241022'
+        model: 'claude-3-5-sonnet-20241022',
+        tools: {}
       });
 
       expect(agent.getToolNames()).toHaveLength(0);
 
-      const newTool: ToolAction = {
-        description: 'New dynamic tool',
-        execute: async () => ({ result: 'Dynamic result' })
-      };
-
-      agent.addTool('dynamicTool', newTool);
+      // 新しいツールを追加
+      const dynamicTool = createTool({
+        id: 'dynamicTool',
+        description: 'Dynamic tool',
+        execute: vi.fn().mockResolvedValue({ result: 'dynamic' })
+      });
       
+      agent.addTool('dynamicTool', dynamicTool);
+
       expect(agent.getToolNames()).toContain('dynamicTool');
-      expect(agent.getTools().dynamicTool).toBe(newTool);
+      expect(agent.getTools().dynamicTool).toBe(dynamicTool);
+
+      // 別のツールを追加
+      const anotherTool = createTool({
+        id: 'anotherTool',
+        description: 'Another tool',
+        execute: vi.fn()
+      });
+      
+      agent.addTool('anotherTool', anotherTool);
+
+      expect(agent.getToolNames()).toHaveLength(2);
     });
 
     it('should support removing tools', () => {
-      const tools = {
-        tool1: { description: 'Tool 1' } as ToolAction,
-        tool2: { description: 'Tool 2' } as ToolAction
-      };
+      const toolToRemove = createTool({
+        id: 'toolToRemove',
+        description: 'Tool to be removed',
+        execute: vi.fn()
+      });
+
+      const toolToKeep = createTool({
+        id: 'toolToKeep',
+        description: 'Tool to keep',
+        execute: vi.fn()
+      });
 
       const agent = new ClaudeCodeAgent({
         name: 'test-agent',
         instructions: 'Test instructions',
         model: 'claude-3-5-sonnet-20241022',
-        tools
+        tools: {
+          toolToRemove,
+          toolToKeep
+        }
       });
 
       expect(agent.getToolNames()).toHaveLength(2);
 
-      agent.removeTool('tool1');
+      agent.removeTool('toolToRemove');
 
       expect(agent.getToolNames()).toHaveLength(1);
-      expect(agent.getToolNames()).not.toContain('tool1');
-      expect(agent.getToolNames()).toContain('tool2');
+      expect(agent.getToolNames()).not.toContain('toolToRemove');
+      expect(agent.getToolNames()).toContain('toolToKeep');
     });
   });
 });

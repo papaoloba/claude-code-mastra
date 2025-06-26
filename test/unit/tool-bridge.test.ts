@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ToolBridge } from '../../src/tool-bridge.js';
 import { z } from 'zod';
-import type { ToolAction } from '@mastra/core';
+import { createTool } from '@mastra/core/tools';
 
 describe('ToolBridge', () => {
-  const createMockTool = (description: string, execute?: any): ToolAction => ({
+  const createMockTool = (id: string, description: string, execute?: any) => createTool({
+    id,
     description,
     execute: execute || vi.fn().mockResolvedValue({ result: 'success' })
   });
@@ -12,15 +13,16 @@ describe('ToolBridge', () => {
   describe('generateSystemPrompt', () => {
     it('should generate system prompt with tools', () => {
       const tools = {
-        calculator: createMockTool('Perform calculations'),
-        weather: {
+        calculator: createMockTool('calculator', 'Perform calculations'),
+        weather: createTool({
+          id: 'weather',
           description: 'Get weather information',
           inputSchema: z.object({
             city: z.string(),
             unit: z.enum(['celsius', 'fahrenheit']).optional()
           }),
           execute: vi.fn()
-        } as ToolAction
+        })
       };
 
       const bridge = new ToolBridge(tools);
@@ -91,11 +93,13 @@ Let me calculate that for you.`;
   describe('executeTool', () => {
     it('should execute tool successfully', async () => {
       const mockExecute = vi.fn().mockResolvedValue({ result: 42 });
+      const calculator = createTool({
+        id: 'calculator',
+        description: 'Calculate',
+        execute: mockExecute
+      });
       const tools = {
-        calculator: {
-          description: 'Calculate',
-          execute: mockExecute
-        } as ToolAction
+        calculator
       };
 
       const bridge = new ToolBridge(tools);
@@ -113,15 +117,17 @@ Let me calculate that for you.`;
     });
 
     it('should validate input schema', async () => {
+      const weather = createTool({
+        id: 'weather',
+        description: 'Get weather',
+        inputSchema: z.object({
+          city: z.string(),
+          unit: z.enum(['celsius', 'fahrenheit'])
+        }),
+        execute: vi.fn().mockResolvedValue({ temp: 22 })
+      });
       const tools = {
-        weather: {
-          description: 'Get weather',
-          inputSchema: z.object({
-            city: z.string(),
-            unit: z.enum(['celsius', 'fahrenheit'])
-          }),
-          execute: vi.fn().mockResolvedValue({ temp: 22 })
-        } as ToolAction
+        weather
       };
 
       const bridge = new ToolBridge(tools);
@@ -141,11 +147,13 @@ Let me calculate that for you.`;
     });
 
     it('should handle execution errors', async () => {
+      const failing = createTool({
+        id: 'failing',
+        description: 'Failing tool',
+        execute: vi.fn().mockRejectedValue(new Error('API error'))
+      });
       const tools = {
-        failing: {
-          description: 'Failing tool',
-          execute: vi.fn().mockRejectedValue(new Error('API error'))
-        } as ToolAction
+        failing
       };
 
       const bridge = new ToolBridge(tools);
@@ -192,7 +200,7 @@ Let me calculate that for you.`;
   describe('executionHistory', () => {
     it('should track execution history', async () => {
       const tools = {
-        test: createMockTool('Test tool')
+        test: createMockTool('test', 'Test tool')
       };
 
       const bridge = new ToolBridge(tools);
@@ -208,7 +216,7 @@ Let me calculate that for you.`;
 
     it('should clear history', async () => {
       const tools = {
-        test: createMockTool('Test tool')
+        test: createMockTool('test', 'Test tool')
       };
 
       const bridge = new ToolBridge(tools);

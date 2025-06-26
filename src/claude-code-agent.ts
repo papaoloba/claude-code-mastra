@@ -11,12 +11,14 @@ import type {
 } from './types.js';
 import { MessageConverter } from './message-converter.js';
 import { SessionManager, validateOptions, formatError } from './utils.js';
+import { ToolBridge } from './tool-bridge.js';
 
 export class ClaudeCodeAgent extends Agent {
   private sessionManager: SessionManager;
   private messageConverter: MessageConverter;
   private claudeOptions: Required<ClaudeCodeAgentOptions>;
   private _tools: ToolsInput;
+  private toolBridge: ToolBridge;
 
   constructor(config: any & { claudeCodeOptions?: ClaudeCodeAgentOptions; tools?: ToolsInput }) {
     super(config);
@@ -24,6 +26,7 @@ export class ClaudeCodeAgent extends Agent {
     this.messageConverter = new MessageConverter();
     this.claudeOptions = validateOptions(config.claudeCodeOptions);
     this._tools = config.tools || {};
+    this.toolBridge = new ToolBridge(this._tools);
   }
 
   async generate(
@@ -31,15 +34,18 @@ export class ClaudeCodeAgent extends Agent {
     args?: any
   ): Promise<any> {
     const session = this.sessionManager.createSession();
-    let prompt = this.extractPromptFromMessages(messages);
+    const prompt = this.extractPromptFromMessages(messages);
     
-    // Mastraツールの情報をプロンプトに追加
-    const toolsPrompt = this.generateToolsPrompt();
-    if (toolsPrompt) {
-      prompt = `${toolsPrompt}\n\n${prompt}`;
-    }
-    
+    // オプションをマージ
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
+    
+    // Mastraツールの情報をシステムプロンプトとして追加
+    const toolsSystemPrompt = this.toolBridge.generateSystemPrompt();
+    if (toolsSystemPrompt && !mergedOptions.customSystemPrompt) {
+      mergedOptions.appendSystemPrompt = mergedOptions.appendSystemPrompt 
+        ? `${mergedOptions.appendSystemPrompt}\n\n${toolsSystemPrompt}`
+        : toolsSystemPrompt;
+    }
     
     try {
       const claudeOptions = this.createClaudeCodeOptions(mergedOptions);
@@ -57,20 +63,22 @@ export class ClaudeCodeAgent extends Agent {
         sdkMessages.push(...iterationMessages);
 
         // ツール呼び出しを検出
-        const toolCall = this.detectToolCall(iterationMessages);
+        const lastMessage = this.getLastAssistantContent(iterationMessages);
+        if (!lastMessage) {
+          break;
+        }
+        
+        const toolCall = this.toolBridge.detectToolCall(lastMessage);
         if (!toolCall) {
           break; // ツール呼び出しがなければ終了
         }
 
         // ツールを実行
-        try {
-          const toolResult = await this.executeTool(toolCall.toolName, toolCall.input);
-          currentPrompt = `Tool "${toolCall.toolName}" was executed with result: ${JSON.stringify(toolResult)}\n\nPlease continue with the task using this information.`;
-          iterationCount++;
-        } catch (error) {
-          currentPrompt = `Tool "${toolCall.toolName}" failed with error: ${formatError(error)}\n\nPlease continue with the task or suggest an alternative approach.`;
-          iterationCount++;
-        }
+        const toolResult = await this.toolBridge.executeTool(toolCall.toolName, toolCall.parameters);
+        const resultMessage = this.toolBridge.formatToolResult(toolResult);
+        
+        currentPrompt = `${resultMessage}\n\nPlease continue with the task using this information.`;
+        iterationCount++;
       }
 
       this.sessionManager.endSession(session.sessionId);
@@ -107,15 +115,18 @@ export class ClaudeCodeAgent extends Agent {
     args?: any
   ): Promise<any> {
     const session = this.sessionManager.createSession();
-    let prompt = this.extractPromptFromMessages(messages);
+    const prompt = this.extractPromptFromMessages(messages);
     
-    // Mastraツールの情報をプロンプトに追加
-    const toolsPrompt = this.generateToolsPrompt();
-    if (toolsPrompt) {
-      prompt = `${toolsPrompt}\n\n${prompt}`;
-    }
-    
+    // オプションをマージ
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
+    
+    // Mastraツールの情報をシステムプロンプトとして追加
+    const toolsSystemPrompt = this.toolBridge.generateSystemPrompt();
+    if (toolsSystemPrompt && !mergedOptions.customSystemPrompt) {
+      mergedOptions.appendSystemPrompt = mergedOptions.appendSystemPrompt 
+        ? `${mergedOptions.appendSystemPrompt}\n\n${toolsSystemPrompt}`
+        : toolsSystemPrompt;
+    }
     
     const chunks: MastraStreamChunk[] = [];
     
@@ -143,34 +154,28 @@ export class ClaudeCodeAgent extends Agent {
         }
 
         // ツール呼び出しを検出
-        const toolCall = this.detectToolCall(iterationMessages);
+        const lastMessage = this.getLastAssistantContent(iterationMessages);
+        if (!lastMessage) {
+          break;
+        }
+        
+        const toolCall = this.toolBridge.detectToolCall(lastMessage);
         if (!toolCall) {
           break; // ツール呼び出しがなければ終了
         }
 
         // ツールを実行
-        try {
-          const toolResult = await this.executeTool(toolCall.toolName, toolCall.input);
-          currentPrompt = `Tool "${toolCall.toolName}" was executed with result: ${JSON.stringify(toolResult)}\n\nPlease continue with the task using this information.`;
-          
-          // ツール実行結果をメタデータチャンクとして追加
-          chunks.push(this.messageConverter.createMetadataChunk(
-            { toolExecution: { name: toolCall.toolName, result: toolResult } },
-            session.sessionId
-          ));
-          
-          iterationCount++;
-        } catch (error) {
-          currentPrompt = `Tool "${toolCall.toolName}" failed with error: ${formatError(error)}\n\nPlease continue with the task or suggest an alternative approach.`;
-          
-          // エラーをメタデータチャンクとして追加
-          chunks.push(this.messageConverter.createMetadataChunk(
-            { toolError: { name: toolCall.toolName, error: formatError(error) } },
-            session.sessionId
-          ));
-          
-          iterationCount++;
-        }
+        const toolResult = await this.toolBridge.executeTool(toolCall.toolName, toolCall.parameters);
+        const resultMessage = this.toolBridge.formatToolResult(toolResult);
+        
+        // ツール実行結果をメタデータチャンクとして追加
+        chunks.push(this.messageConverter.createMetadataChunk(
+          { toolExecution: { name: toolCall.toolName, result: toolResult.output, error: toolResult.error } },
+          session.sessionId
+        ));
+        
+        currentPrompt = `${resultMessage}\n\nPlease continue with the task using this information.`;
+        iterationCount++;
       }
 
       this.sessionManager.endSession(session.sessionId);
@@ -357,6 +362,23 @@ export class ClaudeCodeAgent extends Agent {
     delete this._tools[name];
   }
 
+  private getLastAssistantContent(messages: SDKMessage[]): string | null {
+    // 最後のアシスタントメッセージの内容を取得
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const message = messages[i];
+      if (message && message.type === 'assistant') {
+        let content: string | undefined;
+        if ('content' in message && typeof message.content === 'string') {
+          content = message.content;
+        } else if ('message' in message && message.message && typeof message.message === 'object' && 'content' in message.message && typeof message.message.content === 'string') {
+          content = message.message.content;
+        }
+        if (content) return content;
+      }
+    }
+    return null;
+  }
+
   // ヘルパーメソッド
   private generateToolsPrompt(): string {
     const toolNames = this.getToolNames();
@@ -407,17 +429,30 @@ export class ClaudeCodeAgent extends Agent {
         
         if (!content) continue;
         
+        // デバッグ: contentを確認
+        if (process.env.DEBUG_TOOLS) {
+          console.log('🔍 Checking message for tool calls:', content.substring(0, 200) + '...');
+        }
+        
         // XMLタグ形式のツール呼び出しを検出
         const toolUseMatch = content.match(/<tool_use>\s*<tool_name>([^<]+)<\/tool_name>\s*<parameters>\s*([\s\S]*?)\s*<\/parameters>\s*<\/tool_use>/i);
         if (toolUseMatch) {
           const toolName = toolUseMatch[1].trim();
           const parametersStr = toolUseMatch[2].trim();
           
+          if (process.env.DEBUG_TOOLS) {
+            console.log('✅ Tool call detected:', toolName);
+            console.log('📄 Parameters:', parametersStr);
+          }
+          
           try {
             const input = JSON.parse(parametersStr);
             return { toolName, input };
           } catch (e) {
             // JSONパースエラーの場合は空オブジェクトを使用
+            if (process.env.DEBUG_TOOLS) {
+              console.log('⚠️ JSON parse error, using empty object');
+            }
             return { toolName, input: {} };
           }
         }

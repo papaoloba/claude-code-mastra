@@ -23,3 +23,7 @@ export { SessionManager, formatError, validateOptions } from './utils.js';
 
 // メッセージコンバーターのエクスポート
 export { MessageConverter } from './message-converter.js';
+
+// ツールブリッジのエクスポート
+export { ToolBridge } from './tool-bridge.js';
+export type { ToolExecutionResult } from './tool-bridge.js';

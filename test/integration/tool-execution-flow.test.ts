@@ -48,25 +48,25 @@ describe('Tool Execution Flow - Integration Tests', () => {
               role: 'assistant',
               content: `I'll calculate that for you.
 
-<tool_use>
-<tool_name>calculator</tool_name>
-<parameters>
+\`\`\`json
 {
-  "expression": "10 * 4.2"
+  "tool": "calculator",
+  "parameters": {
+    "expression": "10 * 4.2"
+  }
 }
-</parameters>
-</tool_use>`
+\`\`\``
             },
             content: `I'll calculate that for you.
 
-<tool_use>
-<tool_name>calculator</tool_name>
-<parameters>
+\`\`\`json
 {
-  "expression": "10 * 4.2"
+  "tool": "calculator",
+  "parameters": {
+    "expression": "10 * 4.2"
+  }
 }
-</parameters>
-</tool_use>`,
+\`\`\``,
             session_id: 'test-session'
           };
           yield {
@@ -109,8 +109,9 @@ describe('Tool Execution Flow - Integration Tests', () => {
 
       // 2回目の呼び出しでツール結果が渡されていることを確認
       const secondCall = mockQuery.mock.calls[1][0];
-      expect(secondCall.prompt).toContain('Tool "calculator" was executed with result:');
-      expect(secondCall.prompt).toContain('"result":42');
+      expect(secondCall.prompt).toContain('Tool execution completed:');
+      expect(secondCall.prompt).toContain('Tool: calculator');
+      expect(secondCall.prompt).toContain('"result": 42');
 
       // 最終結果にツール実行結果が反映されていることを確認
       expect(result.text).toContain('42');
@@ -152,21 +153,21 @@ describe('Tool Execution Flow - Integration Tests', () => {
               role: 'assistant',
               content: `Let me check the current time first.
 
-<tool_use>
-<tool_name>currentTime</tool_name>
-<parameters>
-{}
-</parameters>
-</tool_use>`
+\`\`\`json
+{
+  "tool": "currentTime",
+  "parameters": {}
+}
+\`\`\``
             },
             content: `Let me check the current time first.
 
-<tool_use>
-<tool_name>currentTime</tool_name>
-<parameters>
-{}
-</parameters>
-</tool_use>`,
+\`\`\`json
+{
+  "tool": "currentTime",
+  "parameters": {}
+}
+\`\`\``,
             session_id: 'test-session'
           };
         } else if (callCount === 1) {
@@ -178,25 +179,25 @@ describe('Tool Execution Flow - Integration Tests', () => {
               role: 'assistant',
               content: `Now let me check the weather in Tokyo.
 
-<tool_use>
-<tool_name>weather</tool_name>
-<parameters>
+\`\`\`json
 {
-  "city": "Tokyo"
+  "tool": "weather",
+  "parameters": {
+    "city": "Tokyo"
+  }
 }
-</parameters>
-</tool_use>`
+\`\`\``
             },
             content: `Now let me check the weather in Tokyo.
 
-<tool_use>
-<tool_name>weather</tool_name>
-<parameters>
+\`\`\`json
 {
-  "city": "Tokyo"
+  "tool": "weather",
+  "parameters": {
+    "city": "Tokyo"
+  }
 }
-</parameters>
-</tool_use>`,
+\`\`\``,
             session_id: 'test-session'
           };
         } else {
@@ -267,23 +268,23 @@ describe('Tool Execution Flow - Integration Tests', () => {
             type: 'assistant',
             message: {
               role: 'assistant',
-              content: `<tool_use>
-<tool_name>apiCall</tool_name>
-<parameters>
+              content: `\`\`\`json
 {
-  "endpoint": "/users"
+  "tool": "apiCall",
+  "parameters": {
+    "endpoint": "/users"
+  }
 }
-</parameters>
-</tool_use>`
+\`\`\``
             },
-            content: `<tool_use>
-<tool_name>apiCall</tool_name>
-<parameters>
+            content: `\`\`\`json
 {
-  "endpoint": "/users"
+  "tool": "apiCall",
+  "parameters": {
+    "endpoint": "/users"
+  }
 }
-</parameters>
-</tool_use>`,
+\`\`\``,
             session_id: 'test-session'
           };
         } else {
@@ -316,8 +317,9 @@ describe('Tool Execution Flow - Integration Tests', () => {
 
       // エラー情報が次のプロンプトに含まれることを確認
       const secondCall = mockQuery.mock.calls[1][0];
-      expect(secondCall.prompt).toContain('Tool "apiCall" failed with error:');
-      expect(secondCall.prompt).toContain('API connection failed');
+      expect(secondCall.prompt).toContain('Tool execution failed:');
+      expect(secondCall.prompt).toContain('Tool: apiCall');
+      expect(secondCall.prompt).toContain('Error: API connection failed');
 
       // 最終結果がエラーを適切に処理していることを確認
       expect(result.text).toContain('error');
@@ -347,19 +349,19 @@ describe('Tool Execution Flow - Integration Tests', () => {
           type: 'assistant',
           message: {
             role: 'assistant',
-            content: `<tool_use>
-<tool_name>infiniteTool</tool_name>
-<parameters>
-{}
-</parameters>
-</tool_use>`
+            content: `\`\`\`json
+{
+  "tool": "infiniteTool",
+  "parameters": {}
+}
+\`\`\``
           },
-          content: `<tool_use>
-<tool_name>infiniteTool</tool_name>
-<parameters>
-{}
-</parameters>
-</tool_use>`,
+          content: `\`\`\`json
+{
+  "tool": "infiniteTool",
+  "parameters": {}
+}
+\`\`\``,
           session_id: 'test-session'
         };
         yield {
@@ -405,9 +407,9 @@ describe('Tool Execution Flow - Integration Tests', () => {
             type: 'assistant',
             message: {
               role: 'assistant',
-              content: 'I will calculate that.\n\n<tool_use>\n<tool_name>calculator</tool_name>\n<parameters>\n{"expression": "50 + 50"}\n</parameters>\n</tool_use>'
+              content: 'I will calculate that.\n\n\`\`\`json\n{\n  "tool": "calculator",\n  "parameters": {\n    "expression": "50 + 50"\n  }\n}\n\`\`\`'
             },
-            content: 'I will calculate that.\n\n<tool_use>\n<tool_name>calculator</tool_name>\n<parameters>\n{"expression": "50 + 50"}\n</parameters>\n</tool_use>',
+            content: 'I will calculate that.\n\n\`\`\`json\n{\n  "tool": "calculator",\n  "parameters": {\n    "expression": "50 + 50"\n  }\n}\n\`\`\`',
             session_id: 'test-session'
           };
         } else {

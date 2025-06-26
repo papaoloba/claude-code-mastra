@@ -28,7 +28,14 @@
   "author": "Takahito Mita",
   "license": "ISC",
   "description": "Claude Code SDK integration for Mastra framework",
-  "keywords": ["claude", "claude-code", "mastra", "ai", "typescript", "sdk"],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "mastra",
+    "ai",
+    "typescript",
+    "sdk"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/t3ta/claude-code-mastra.git"
@@ -39,6 +46,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.4",
+    "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"

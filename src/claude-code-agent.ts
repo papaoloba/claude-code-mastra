@@ -36,6 +36,9 @@ export class ClaudeCodeAgent extends Agent {
     const session = this.sessionManager.createSession();
     const prompt = this.extractPromptFromMessages(messages);
     
+    // ツール履歴をクリア
+    this.toolBridge.clearHistory();
+    
     // オプションをマージ
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
     
@@ -89,15 +92,28 @@ export class ClaudeCodeAgent extends Agent {
         startTime
       );
 
+      // ツール実行履歴から toolCalls を生成
+      const toolHistory = this.toolBridge.getExecutionHistory();
+      const toolCalls = toolHistory.length > 0 ? toolHistory.map(execution => ({
+        toolCallId: `tool_${execution.timestamp}`,
+        toolName: execution.toolName,
+        args: execution.input,
+        result: execution.output
+      })) : undefined;
+
       return {
         text: mastraResponse.content,
+        toolCalls,
         usage: {
           promptTokens: 0,
           completionTokens: 0,
           totalTokens: 0
         },
         finishReason: 'stop',
-        experimental_providerMetadata: mastraResponse.metadata
+        experimental_providerMetadata: {
+          ...mastraResponse.metadata,
+          toolExecutions: toolHistory
+        }
       };
 
     } catch (error) {
@@ -116,6 +132,9 @@ export class ClaudeCodeAgent extends Agent {
   ): Promise<any> {
     const session = this.sessionManager.createSession();
     const prompt = this.extractPromptFromMessages(messages);
+    
+    // ツール履歴をクリア
+    this.toolBridge.clearHistory();
     
     // オプションをマージ
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
@@ -193,17 +212,30 @@ export class ClaudeCodeAgent extends Agent {
       }, 30000);
     }
 
+    // ツール実行履歴から toolCalls を生成
+    const toolHistory = this.toolBridge.getExecutionHistory();
+    const toolCalls = toolHistory.length > 0 ? toolHistory.map(execution => ({
+      toolCallId: `tool_${execution.timestamp}`,
+      toolName: execution.toolName,
+      args: execution.input,
+      result: execution.output
+    })) : undefined;
+
     // StreamTextResultを返すために、シンプルなストリームオブジェクトを作成
     return {
       textStream: this.createAsyncIterable(chunks),
       text: this.getTextFromChunks(chunks),
+      toolCalls: Promise.resolve(toolCalls),
       usage: Promise.resolve({
         promptTokens: 0,
         completionTokens: 0,
         totalTokens: 0
       }),
       finishReason: Promise.resolve('stop' as const),
-      experimental_providerMetadata: Promise.resolve({ sessionId: session.sessionId })
+      experimental_providerMetadata: Promise.resolve({ 
+        sessionId: session.sessionId,
+        toolExecutions: toolHistory
+      })
     };
   }
 

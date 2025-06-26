@@ -1,10 +1,13 @@
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-code';
 import { Agent } from '@mastra/core';
+import type { ToolAction } from '@mastra/core';
+import { z } from 'zod';
 import type {
   ClaudeCodeAgentOptions,
   MastraResponse,
   MastraStreamChunk,
-  SessionInfo
+  SessionInfo,
+  ToolsInput
 } from './types.js';
 import { MessageConverter } from './message-converter.js';
 import { SessionManager, validateOptions, formatError } from './utils.js';
@@ -13,12 +16,14 @@ export class ClaudeCodeAgent extends Agent {
   private sessionManager: SessionManager;
   private messageConverter: MessageConverter;
   private claudeOptions: Required<ClaudeCodeAgentOptions>;
+  private _tools: ToolsInput;
 
-  constructor(config: any & { claudeCodeOptions?: ClaudeCodeAgentOptions }) {
+  constructor(config: any & { claudeCodeOptions?: ClaudeCodeAgentOptions; tools?: ToolsInput }) {
     super(config);
     this.sessionManager = new SessionManager();
     this.messageConverter = new MessageConverter();
     this.claudeOptions = validateOptions(config.claudeCodeOptions);
+    this._tools = config.tools || {};
   }
 
   async generate(
@@ -217,6 +222,61 @@ export class ClaudeCodeAgent extends Agent {
 
   getClaudeCodeOptions(): Required<ClaudeCodeAgentOptions> {
     return { ...this.claudeOptions };
+  }
+
+  // Mastra Agent Tools メソッド
+  getTools(): ToolsInput {
+    return { ...this._tools };
+  }
+
+  getToolNames(): string[] {
+    return Object.keys(this._tools);
+  }
+
+  getToolDescriptions(): Record<string, string> {
+    const descriptions: Record<string, string> = {};
+    for (const [name, tool] of Object.entries(this._tools)) {
+      descriptions[name] = tool.description;
+    }
+    return descriptions;
+  }
+
+  async executeTool(toolName: string, input: any): Promise<any> {
+    const tool = this._tools[toolName];
+    if (!tool) {
+      throw new Error(`Tool "${toolName}" not found`);
+    }
+
+    // 入力スキーマの検証
+    if (tool.inputSchema) {
+      try {
+        const validatedInput = tool.inputSchema.parse(input);
+        input = validatedInput;
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          throw new Error(`Invalid input for tool "${toolName}": ${error.message}`);
+        }
+        throw error;
+      }
+    }
+
+    // ツールの実行
+    if (!tool.execute) {
+      throw new Error(`Tool "${toolName}" does not have an execute function`);
+    }
+
+    return await tool.execute({ context: input }, {
+      toolCallId: `tool_${Date.now()}`,
+      messages: []
+    });
+  }
+
+  addTool(name: string, tool: ToolAction<any, any, any>): void {
+    this._tools[name] = tool;
+  }
+
+  removeTool(name: string): void {
+    delete this._tools[name];
   }
 
   // ヘルパーメソッド

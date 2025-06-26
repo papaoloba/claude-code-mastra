@@ -1,3 +1,7 @@
+import type { ToolAction } from '@mastra/core';
+
+export type ToolsInput = Record<string, ToolAction<any, any, any>>;
+
 export interface ClaudeCodeAgentOptions {
   maxTurns?: number;
   allowedTools?: string[];

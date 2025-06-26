@@ -9,6 +9,8 @@ Claude CodeのTypeScript SDKを使用して、Mastraフレームワーク内でC
 ## 特徴
 
 - **Mastra Agent互換**: Mastra FrameworkのAgentインターフェースに完全準拠
+- **カスタムツール**: Mastra Agentのtools機能をサポート
+- **MCP外部ツール**: Model Context Protocolによる外部ツール統合
 - **ストリーミング対応**: リアルタイムレスポンス処理
 - **セッション管理**: セッション状態の追跡とリソース管理
 - **エラーハンドリング**: 堅牢なエラー処理機構
@@ -137,6 +139,78 @@ for await (const chunk of agent.stream('prompt')) {
     break;
   }
 }
+```
+
+## カスタムツールの使用
+
+### ツール定義と実行
+
+```typescript
+import { ClaudeCodeAgent } from './claude-code-agent.js';
+import { z } from 'zod';
+import type { ToolAction } from '@mastra/core';
+
+// カスタムツールの定義
+const weatherTool: ToolAction = {
+  description: 'Get weather information for a city',
+  inputSchema: z.object({
+    city: z.string(),
+    unit: z.enum(['celsius', 'fahrenheit']).optional()
+  }),
+  execute: async ({ context }) => {
+    // 実際のAPIコールなど
+    return {
+      city: context.city,
+      temperature: 22,
+      unit: context.unit || 'celsius',
+      conditions: 'Sunny'
+    };
+  }
+};
+
+// ツール付きエージェントの作成
+const agent = new ClaudeCodeAgent({
+  name: 'weather-agent',
+  instructions: 'You are a weather assistant with access to weather data.',
+  model: 'claude-3-5-sonnet-20241022',
+  tools: {
+    getWeather: weatherTool
+  }
+});
+
+// ツールの直接実行
+const weatherData = await agent.executeTool('getWeather', { 
+  city: 'Tokyo',
+  unit: 'celsius'
+});
+
+// エージェントでの使用
+const response = await agent.generate(
+  'What is the weather like in Tokyo?'
+);
+```
+
+### 動的なツール管理
+
+```typescript
+// ツールの追加
+agent.addTool('calculator', {
+  description: 'Perform calculations',
+  inputSchema: z.object({
+    expression: z.string()
+  }),
+  execute: async ({ context }) => {
+    // 計算ロジック
+    return { result: eval(context.expression) };
+  }
+});
+
+// 利用可能なツールの確認
+console.log(agent.getToolNames()); // ['getWeather', 'calculator']
+console.log(agent.getToolDescriptions());
+
+// ツールの削除
+agent.removeTool('calculator');
 ```
 
 ## 高度な使用例

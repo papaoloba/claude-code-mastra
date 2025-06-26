@@ -11,8 +11,12 @@ export type {
   McpServerConfig,
   McpStdioServerConfig,
   McpSSEServerConfig,
-  McpHttpServerConfig
+  McpHttpServerConfig,
+  ToolsInput
 } from './types.js';
+
+// Mastra Coreの型を再エクスポート（便利のため）
+export type { ToolAction } from '@mastra/core';
 
 // ユーティリティのエクスポート
 export { SessionManager, formatError, validateOptions } from './utils.js';

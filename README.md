@@ -86,7 +86,7 @@ interface ClaudeCodeAgentOptions {
 #### getAllActiveSessions(): SessionInfo[]
 アクティブなセッション一覧を取得します。
 
-#### updateDefaultOptions(options: Partial<ClaudeCodeAgentOptions>): void
+#### updateClaudeCodeOptions(options: Partial<ClaudeCodeAgentOptions>): void
 デフォルトオプションを更新します。
 
 ## レスポンス形式
@@ -179,7 +179,7 @@ const agent = new ClaudeCodeAgent({
 });
 
 // ツールの直接実行
-const weatherData = await agent.executeTool('getWeather', { 
+const weatherData = await agent.executeTool('getWeather', {
   city: 'Tokyo',
   unit: 'celsius'
 });
@@ -401,7 +401,7 @@ npm run test:watch
 
 ## ライセンス
 
-ISC
+MIT
 
 ## 作者
 

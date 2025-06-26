@@ -252,13 +252,18 @@ describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
 
       await agent.generate('Search for TypeScript tutorials');
 
-      // appendSystemPromptにツール情報が含まれることを確認
+      // プロンプトにツール情報が含まれることを確認
       expect(mockQuery).toHaveBeenCalledWith({
-        prompt: 'Search for TypeScript tutorials',
+        prompt: expect.stringContaining('You have access to the following custom tools:'),
         options: expect.objectContaining({
-          appendSystemPrompt: expect.stringContaining('Always use tools when appropriate.')
+          appendSystemPrompt: 'Always use tools when appropriate.'
         })
       });
+      
+      // プロンプトに元のメッセージも含まれることを確認
+      const callArgs = mockQuery.mock.calls[0][0];
+      expect(callArgs.prompt).toContain('Search for TypeScript tutorials');
+      expect(callArgs.prompt).toContain('searchTool: Search for information');
     });
   });
 

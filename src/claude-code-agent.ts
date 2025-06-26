@@ -31,7 +31,14 @@ export class ClaudeCodeAgent extends Agent {
     args?: any
   ): Promise<any> {
     const session = this.sessionManager.createSession();
-    const prompt = this.extractPromptFromMessages(messages);
+    let prompt = this.extractPromptFromMessages(messages);
+    
+    // Mastraツールの情報をプロンプトに追加
+    const toolsPrompt = this.generateToolsPrompt();
+    if (toolsPrompt) {
+      prompt = `${toolsPrompt}\n\n${prompt}`;
+    }
+    
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
     
     try {
@@ -39,7 +46,32 @@ export class ClaudeCodeAgent extends Agent {
       const sdkMessages: SDKMessage[] = [];
       const startTime = Date.now();
 
-      await this.collectMessages(prompt, claudeOptions, sdkMessages);
+      // ツール実行ループ
+      let currentPrompt = prompt;
+      let iterationCount = 0;
+      const maxIterations = 5; // 無限ループを防ぐ
+
+      while (iterationCount < maxIterations) {
+        const iterationMessages: SDKMessage[] = [];
+        await this.collectMessages(currentPrompt, claudeOptions, iterationMessages);
+        sdkMessages.push(...iterationMessages);
+
+        // ツール呼び出しを検出
+        const toolCall = this.detectToolCall(iterationMessages);
+        if (!toolCall) {
+          break; // ツール呼び出しがなければ終了
+        }
+
+        // ツールを実行
+        try {
+          const toolResult = await this.executeTool(toolCall.toolName, toolCall.input);
+          currentPrompt = `Tool "${toolCall.toolName}" was executed with result: ${JSON.stringify(toolResult)}\n\nPlease continue with the task using this information.`;
+          iterationCount++;
+        } catch (error) {
+          currentPrompt = `Tool "${toolCall.toolName}" failed with error: ${formatError(error)}\n\nPlease continue with the task or suggest an alternative approach.`;
+          iterationCount++;
+        }
+      }
 
       this.sessionManager.endSession(session.sessionId);
       
@@ -75,7 +107,14 @@ export class ClaudeCodeAgent extends Agent {
     args?: any
   ): Promise<any> {
     const session = this.sessionManager.createSession();
-    const prompt = this.extractPromptFromMessages(messages);
+    let prompt = this.extractPromptFromMessages(messages);
+    
+    // Mastraツールの情報をプロンプトに追加
+    const toolsPrompt = this.generateToolsPrompt();
+    if (toolsPrompt) {
+      prompt = `${toolsPrompt}\n\n${prompt}`;
+    }
+    
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
     
     const chunks: MastraStreamChunk[] = [];
@@ -88,11 +127,50 @@ export class ClaudeCodeAgent extends Agent {
         session.sessionId
       ));
 
-      const queryIterator = query({ prompt, options: claudeOptions });
+      // ツール実行ループ（ストリーミング版）
+      let currentPrompt = prompt;
+      let iterationCount = 0;
+      const maxIterations = 5;
 
-      for await (const message of queryIterator) {
-        this.updateSessionFromMessage(session.sessionId, message);
-        chunks.push(this.messageConverter.convertSDKMessageToStreamChunk(message));
+      while (iterationCount < maxIterations) {
+        const iterationMessages: SDKMessage[] = [];
+        const queryIterator = query({ prompt: currentPrompt, options: claudeOptions });
+
+        for await (const message of queryIterator) {
+          this.updateSessionFromMessage(session.sessionId, message);
+          chunks.push(this.messageConverter.convertSDKMessageToStreamChunk(message));
+          iterationMessages.push(message);
+        }
+
+        // ツール呼び出しを検出
+        const toolCall = this.detectToolCall(iterationMessages);
+        if (!toolCall) {
+          break; // ツール呼び出しがなければ終了
+        }
+
+        // ツールを実行
+        try {
+          const toolResult = await this.executeTool(toolCall.toolName, toolCall.input);
+          currentPrompt = `Tool "${toolCall.toolName}" was executed with result: ${JSON.stringify(toolResult)}\n\nPlease continue with the task using this information.`;
+          
+          // ツール実行結果をメタデータチャンクとして追加
+          chunks.push(this.messageConverter.createMetadataChunk(
+            { toolExecution: { name: toolCall.toolName, result: toolResult } },
+            session.sessionId
+          ));
+          
+          iterationCount++;
+        } catch (error) {
+          currentPrompt = `Tool "${toolCall.toolName}" failed with error: ${formatError(error)}\n\nPlease continue with the task or suggest an alternative approach.`;
+          
+          // エラーをメタデータチャンクとして追加
+          chunks.push(this.messageConverter.createMetadataChunk(
+            { toolError: { name: toolCall.toolName, error: formatError(error) } },
+            session.sessionId
+          ));
+          
+          iterationCount++;
+        }
       }
 
       this.sessionManager.endSession(session.sessionId);
@@ -280,6 +358,102 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   // ヘルパーメソッド
+  private generateToolsPrompt(): string {
+    const toolNames = this.getToolNames();
+    if (toolNames.length === 0) {
+      return '';
+    }
+
+    const toolDescriptions = toolNames.map(name => {
+      const tool = this._tools[name];
+      let description = `- ${name}: ${tool.description}`;
+      
+      // 入力スキーマの情報を追加
+      if (tool.inputSchema) {
+        try {
+          // Zodスキーマから型情報を抽出
+          const shape = (tool.inputSchema as any)._def?.shape?.() || {};
+          const params = Object.entries(shape).map(([key, value]: [string, any]) => {
+            const type = value._def?.typeName?.replace('Zod', '').toLowerCase() || 'unknown';
+            const isOptional = value.isOptional?.() || false;
+            return `${key}: ${type}${isOptional ? ' (optional)' : ''}`;
+          }).join(', ');
+          
+          if (params) {
+            description += ` [Parameters: ${params}]`;
+          }
+        } catch (e) {
+          // スキーマの解析に失敗した場合は無視
+        }
+      }
+      
+      return description;
+    }).join('\n');
+
+    return `You have access to the following custom tools:\n${toolDescriptions}\n\nWhen you need to use one of these tools, respond with a special format:\n<tool_use>\n<tool_name>TOOL_NAME</tool_name>\n<parameters>\n{\n  "param1": "value1",\n  "param2": "value2"\n}\n</parameters>\n</tool_use>\n\nAfter using a tool, I will provide you with the result and you can continue with the task.`;
+  }
+
+  private detectToolCall(messages: SDKMessage[]): { toolName: string; input: any } | null {
+    // メッセージからツール呼び出しを検出
+    for (const message of messages) {
+      if (message && message.type === 'assistant') {
+        // SDKAssistantMessageのcontentフィールドを取得
+        let content: string | undefined;
+        if ('content' in message && typeof message.content === 'string') {
+          content = message.content;
+        } else if ('message' in message && message.message && typeof message.message === 'object' && 'content' in message.message && typeof message.message.content === 'string') {
+          content = message.message.content;
+        }
+        
+        if (!content) continue;
+        
+        // XMLタグ形式のツール呼び出しを検出
+        const toolUseMatch = content.match(/<tool_use>\s*<tool_name>([^<]+)<\/tool_name>\s*<parameters>\s*([\s\S]*?)\s*<\/parameters>\s*<\/tool_use>/i);
+        if (toolUseMatch) {
+          const toolName = toolUseMatch[1].trim();
+          const parametersStr = toolUseMatch[2].trim();
+          
+          try {
+            const input = JSON.parse(parametersStr);
+            return { toolName, input };
+          } catch (e) {
+            // JSONパースエラーの場合は空オブジェクトを使用
+            return { toolName, input: {} };
+          }
+        }
+        
+        // 代替形式: "I want to use the X tool with Y parameters"
+        const naturalMatch = content.match(/(?:i want to use|let me use|using|use) (?:the )?([\w]+) tool.*?(?:with|parameters?:?)\s*([\{\[].*?[\}\]]|\w+.*)/is);
+        if (naturalMatch) {
+          const toolName = naturalMatch[1];
+          const paramsText = naturalMatch[2];
+          
+          try {
+            const input = JSON.parse(paramsText);
+            return { toolName, input };
+          } catch (e) {
+            // 自然言語からパラメータを抽出する試み
+            const params: Record<string, any> = {};
+            const tool = this._tools[toolName];
+            if (tool && tool.inputSchema) {
+              // スキーマに基づいてパラメータを抽出
+              const shape = (tool.inputSchema as any)._def?.shape?.() || {};
+              for (const key of Object.keys(shape)) {
+                const regex = new RegExp(`${key}[:\s]+([^,\s]+)`, 'i');
+                const match = paramsText.match(regex);
+                if (match) {
+                  params[key] = match[1];
+                }
+              }
+            }
+            return Object.keys(params).length > 0 ? { toolName, input: params } : null;
+          }
+        }
+      }
+    }
+    
+    return null;
+  }
   private extractPromptFromMessages(messages: string | string[] | any[]): string {
     if (typeof messages === 'string') {
       return messages;

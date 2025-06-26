@@ -1,31 +1,31 @@
-# Claude Code × Mastra Agent統合
+# Claude Code × Mastra Agent Integration
 
-Claude CodeのTypeScript SDKを使用して、Mastraフレームワーク内でClaude CodeをAgentとして統合する実装です。
+This library integrates the Claude Code TypeScript SDK as an Agent within the Mastra framework.
 
-## 概要
+## Overview
 
-このライブラリは、Claude CodeのSDKをMastra Agentインターフェースに適合させ、Mastraフレームワーク内でClaude Codeの強力なコーディング支援機能を活用できるようにします。
+This library adapts the Claude Code SDK to the Mastra Agent interface, enabling powerful coding assistance features of Claude Code within the Mastra framework.
 
-## 特徴
+## Features
 
-- **Mastra Agent互換**: Mastra FrameworkのAgentインターフェースに完全準拠
-- **カスタムツール**: Mastra Agentのtools機能をサポート
-- **MCP外部ツール**: Model Context Protocolによる外部ツール統合
-- **ストリーミング対応**: リアルタイムレスポンス処理
-- **セッション管理**: セッション状態の追跡とリソース管理
-- **エラーハンドリング**: 堅牢なエラー処理機構
-- **設定可能**: Claude Code固有のオプション設定
-- **型安全**: 完全なTypeScript型定義
+- **Mastra Agent Compatible**: Fully implements the Mastra Framework Agent interface
+- **Custom Tools**: Supports Mastra Agent's tools feature
+- **MCP External Tools**: Integrates external tools via Model Context Protocol
+- **Streaming Support**: Real-time response processing
+- **Session Management**: Tracks session state and manages resources
+- **Error Handling**: Robust error handling mechanisms
+- **Configurable**: Supports Claude Code-specific options
+- **Type Safe**: Complete TypeScript type definitions
 
-## インストール
+## Installation
 
 ```bash
 npm install @anthropic-ai/claude-code @mastra/core
 ```
 
-## 基本的な使用方法
+## Basic Usage
 
-### シンプルな生成
+### Simple Generation
 
 ```typescript
 import { ClaudeCodeAgent } from './claude-code-agent.js';
@@ -40,10 +40,10 @@ const response = await agent.generate(
 );
 
 console.log(response.content);
-console.log(response.metadata); // セッション情報、コスト等
+console.log(response.metadata); // Session info, cost, etc.
 ```
 
-### ストリーミング処理
+### Streaming
 
 ```typescript
 for await (const chunk of agent.stream('Create a REST API with Express.js')) {
@@ -55,15 +55,15 @@ for await (const chunk of agent.stream('Create a REST API with Express.js')) {
 }
 ```
 
-## 設定オプション
+## Configuration Options
 
 ```typescript
 interface ClaudeCodeAgentOptions {
-  maxTurns?: number;                    // 最大ターン数 (デフォルト: 10)
-  allowedTools?: string[];              // 許可されるツール
+  maxTurns?: number;                    // Max turns (default: 10)
+  allowedTools?: string[];              // Allowed tools
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
-  workingDirectory?: string;            // 作業ディレクトリ
-  timeout?: number;                     // タイムアウト (ms, デフォルト: 300000)
+  workingDirectory?: string;            // Working directory
+  timeout?: number;                     // Timeout (ms, default: 300000)
 }
 ```
 
@@ -72,24 +72,24 @@ interface ClaudeCodeAgentOptions {
 ### ClaudeCodeAgent
 
 #### constructor(options?: ClaudeCodeAgentOptions)
-新しいエージェントインスタンスを作成します。
+Creates a new agent instance.
 
 #### generate(prompt: string, options?: Partial<ClaudeCodeAgentOptions>): Promise<MastraResponse>
-単一のレスポンスを生成します。
+Generates a single response.
 
 #### stream(prompt: string, options?: Partial<ClaudeCodeAgentOptions>): AsyncIterable<MastraStreamChunk>
-ストリーミングレスポンスを生成します。
+Generates streaming responses.
 
 #### getSessionInfo(sessionId: string): SessionInfo | undefined
-セッション情報を取得します。
+Retrieves session information.
 
 #### getAllActiveSessions(): SessionInfo[]
-アクティブなセッション一覧を取得します。
+Retrieves all active sessions.
 
 #### updateClaudeCodeOptions(options: Partial<ClaudeCodeAgentOptions>): void
-デフォルトオプションを更新します。
+Updates default options.
 
-## レスポンス形式
+## Response Format
 
 ### MastraResponse
 
@@ -114,16 +114,16 @@ interface MastraStreamChunk {
 }
 ```
 
-## セッション管理
+## Session Management
 
-エージェントは自動的にセッションを管理し、以下の機能を提供します：
+The agent automatically manages sessions and provides:
 
-- **自動セッション作成**: 各クエリで新しいセッションを作成
-- **コスト追跡**: 実行コストの追跡
-- **リソース管理**: 30秒後の自動クリーンアップ
-- **セッション情報**: アクティブセッションの監視
+- **Automatic Session Creation**: Creates a new session for each query
+- **Cost Tracking**: Tracks execution cost
+- **Resource Management**: Automatic cleanup after 30 seconds
+- **Session Info**: Monitors active sessions
 
-## エラーハンドリング
+## Error Handling
 
 ```typescript
 try {
@@ -132,7 +132,7 @@ try {
   console.error('Generation failed:', error.message);
 }
 
-// ストリーミングでのエラー処理
+// Error handling in streaming
 for await (const chunk of agent.stream('prompt')) {
   if (chunk.type === 'error') {
     console.error('Stream error:', chunk.data.error);
@@ -141,16 +141,16 @@ for await (const chunk of agent.stream('prompt')) {
 }
 ```
 
-## カスタムツールの使用
+## Using Custom Tools
 
-### ツール定義と実行
+### Tool Definition and Execution
 
 ```typescript
 import { ClaudeCodeAgent } from './claude-code-agent.js';
 import { z } from 'zod';
 import type { ToolAction } from '@mastra/core';
 
-// カスタムツールの定義
+// Define a custom tool
 const weatherTool: ToolAction = {
   description: 'Get weather information for a city',
   inputSchema: z.object({
@@ -158,7 +158,7 @@ const weatherTool: ToolAction = {
     unit: z.enum(['celsius', 'fahrenheit']).optional()
   }),
   execute: async ({ context }) => {
-    // 実際のAPIコールなど
+    // Actual API call, etc.
     return {
       city: context.city,
       temperature: 22,
@@ -168,7 +168,7 @@ const weatherTool: ToolAction = {
   }
 };
 
-// ツール付きエージェントの作成
+// Create an agent with tools
 const agent = new ClaudeCodeAgent({
   name: 'weather-agent',
   instructions: 'You are a weather assistant with access to weather data.',
@@ -178,69 +178,69 @@ const agent = new ClaudeCodeAgent({
   }
 });
 
-// ツールの直接実行
+// Direct tool execution
 const weatherData = await agent.executeTool('getWeather', {
   city: 'Tokyo',
   unit: 'celsius'
 });
 
-// エージェントでの使用
+// Using the agent
 const response = await agent.generate(
   'What is the weather like in Tokyo?'
 );
 ```
 
-### 動的なツール管理
+### Dynamic Tool Management
 
 ```typescript
-// ツールの追加
+// Add a tool
 agent.addTool('calculator', {
   description: 'Perform calculations',
   inputSchema: z.object({
     expression: z.string()
   }),
   execute: async ({ context }) => {
-    // 計算ロジック
+    // Calculation logic
     return { result: eval(context.expression) };
   }
 });
 
-// 利用可能なツールの確認
+// Check available tools
 console.log(agent.getToolNames()); // ['getWeather', 'calculator']
 console.log(agent.getToolDescriptions());
 
-// ツールの削除
+// Remove a tool
 agent.removeTool('calculator');
 ```
 
-## 高度な使用例
+## Advanced Usage
 
-### 設定の動的更新
+### Dynamic Option Updates
 
 ```typescript
 const agent = new ClaudeCodeAgent();
 
-// デフォルト設定を更新
-agent.updateDefaultOptions({
+// Update default options
+agent.updateClaudeCodeOptions({
   maxTurns: 5,
   allowedTools: ['Edit', 'Read', 'Write'],
   permissionMode: 'bypassPermissions'
 });
 
-// 特定のクエリでオプションをオーバーライド
+// Override options for a specific query
 const response = await agent.generate('prompt', {
   maxTurns: 1,
   timeout: 30000
 });
 ```
 
-### セッション監視
+### Session Monitoring
 
 ```typescript
-// アクティブセッションの監視
+// Monitor active sessions
 console.log('Active sessions:', agent.getAllActiveSessions().length);
 
-// 特定セッションの情報取得
+// Get info for a specific session
 const sessionInfo = agent.getSessionInfo(sessionId);
 if (sessionInfo) {
   console.log('Session cost:', sessionInfo.totalCost);
@@ -248,145 +248,145 @@ if (sessionInfo) {
 }
 ```
 
-## ファイル構成
+## File Structure
 
-- `claude-code-agent.ts` - メインのClaudeCodeAgentクラス
-- `message-converter.ts` - メッセージ変換ユーティリティ
-- `types.ts` - TypeScript型定義
-- `utils.ts` - ヘルパー関数とセッション管理
-- `example.ts` - 使用例とデモコード
+- `claude-code-agent.ts` - Main ClaudeCodeAgent class
+- `message-converter.ts` - Message conversion utilities
+- `types.ts` - TypeScript type definitions
+- `utils.ts` - Helper functions and session management
+- `example.ts` - Usage examples and demo code
 
-## 要件
+## Requirements
 
 - Node.js 18+
 - TypeScript 4.9+
 - `@anthropic-ai/claude-code` ^1.0.35
 - `@mastra/core` ^0.10.8
 
-## 認証
+## Authentication
 
-Claude Codeの認証設定が必要です：
+Claude Code authentication is required:
 
 ```bash
-# Claude Codeにログイン
+# Login to Claude Code
 claude login
 
-# または環境変数で設定
+# Or set via environment variable
 export ANTHROPIC_API_KEY=your_api_key
 ```
 
-## テスト
+## Testing
 
-このプロジェクトは包括的なテストスイートを含んでいます：
+This project includes a comprehensive test suite:
 
-### テストの種類
+### Test Types
 
-#### ユニットテスト
+#### Unit Tests
 ```bash
 npm run test:unit
 ```
-個別のコンポーネントとメソッドをテストします（モック使用）。
+Tests individual components and methods (with mocks).
 
-#### コンポーネント統合テスト
+#### Component Integration Tests
 ```bash
 npm run test:integration
 ```
-各コンポーネント間の統合をテストします（モック使用）。
+Tests integration between components (with mocks).
 
-#### E2Eテスト
+#### E2E Tests
 ```bash
 npm run test:e2e
 ```
-実際のClaude Code SDKとの統合をテストします（実際のAPI呼び出し）。
+Tests integration with the actual Claude Code SDK (real API calls).
 
-⚠️ **注意**: E2Eテストには以下が必要です：
-- Claude Code CLIの設定: `claude login`
-- 有効なAnthropic APIキー
-- インターネット接続
-- APIクレジット消費の可能性
+⚠️ **Note**: E2E tests require:
+- Claude Code CLI setup: `claude login`
+- Valid Anthropic API key
+- Internet connection
+- Possible API credit consumption
 
-#### 全テスト
+#### All Tests
 ```bash
-npm run test        # E2Eを除く全テスト
-npm run test:all    # 全テストを実行
-npm run test:watch  # ウォッチモード
-npm run test:ui     # UI付きテスト
-npm run test:coverage # カバレッジ付きテスト
+npm run test        # All tests except E2E
+npm run test:all    # Run all tests
+npm run test:watch  # Watch mode
+npm run test:ui     # UI test runner
+npm run test:coverage # With coverage
 ```
 
-### テスト結果
+### Test Results
 
-- **73個のユニット・統合テスト**
-- **9個のE2Eテスト**
-- **完全なカバレッジ**: 全主要機能をカバー
-- **パフォーマンステスト**: レスポンス時間とコンカレンシー
-- **エラーハンドリングテスト**: 異常系の動作確認
+- **73 unit/integration tests**
+- **9 E2E tests**
+- **Full coverage**: All major features covered
+- **Performance tests**: Response time and concurrency
+- **Error handling tests**: Abnormal case verification
 
-## 開発
+## Development
 
 ```bash
-# 開発時の型チェック
+# Type checking during development
 npm run typecheck
 
-# ビルド
+# Build
 npm run build
 
-# ウォッチモードでテスト
+# Test in watch mode
 npm run test:watch
 ```
 
-## セキュリティと制限事項
+## Security and Limitations
 
-### 現在の制限事項
+### Current Limitations
 
-現在の実装では、Claude Code SDKの内蔵ツール制限機能（`allowedTools`/`disallowedTools`）が一部正常に動作していません。以下のセキュリティリスクに注意してください：
+Currently, the built-in tool restriction features (`allowedTools`/`disallowedTools`) of the Claude Code SDK may not work as expected. Please note the following security risks:
 
-#### **高リスク**
+#### **High Risk**
 
-1. **意図しないファイル操作**
+1. **Unintended File Operations**
    ```typescript
-   // Write, Edit, Bashツールが制限されていない場合
-   agent.generate("重要なファイルを削除して");
-   // → 実際にファイル操作が実行される可能性
+   // If Write, Edit, Bash tools are not restricted
+   agent.generate("Delete important files");
+   // → May actually perform file operations
    ```
 
-2. **任意コマンド実行**
+2. **Arbitrary Command Execution**
    ```typescript
-   // Bashツールによる任意のシステムコマンド実行
+   // Arbitrary system command execution via Bash tool
    agent.generate("npm install malicious-package");
-   // → システムに変更が加えられる可能性
+   // → May change the system
    ```
 
-3. **システムリソースの濫用**
+3. **System Resource Abuse**
    ```typescript
-   // 無制限のファイル読み込み
-   agent.generate("すべてのファイルを読み込んで");
-   // → 大量のI/O処理によるシステム負荷
+   // Unlimited file reading
+   agent.generate("Read all files");
+   // → Heavy I/O load
    ```
 
-#### **推奨対策**
+#### **Recommended Countermeasures**
 
-1. **本番環境での使用時は注意深く制御する**
-   - 信頼できる入力のみを処理
-   - 重要なファイルがないサンドボックス環境での実行
-   - 適切な権限設定
+1. **Careful control in production**
+   - Only process trusted input
+   - Run in a sandbox environment without important files
+   - Set appropriate permissions
 
-2. **Mastraツールを優先使用**
+2. **Prefer Mastra tools**
    ```typescript
-   // 安全なカスタムツールを定義して使用
+   // Define and use safe custom tools
    const agent = new ClaudeCodeAgent({
      tools: {
        safeTool: {
-         description: '安全な操作のみ実行',
-         // 制御された実装
+         description: 'Performs only safe operations',
+         // Controlled implementation
        }
      }
    });
    ```
 
-3. **セッション監視**
+3. **Session Monitoring**
    ```typescript
-   // セッション情報を監視してコスト制御
+   // Monitor session info and control cost
    const sessions = agent.getAllActiveSessions();
    sessions.forEach(session => {
      if (session.totalCost > threshold) {
@@ -395,14 +395,14 @@ npm run test:watch
    });
    ```
 
-### 修正予定
+### Planned Fixes
 
-ツール制限機能は将来のアップデートで修正予定です。現在はMastraツール統合の核心機能（ツール実行、結果返却、セッション管理）が正常に動作しています。
+Tool restriction features will be fixed in future updates. Currently, the core features (tool execution, result return, session management) work as intended.
 
-## ライセンス
+## License
 
 MIT
 
-## 作者
+## Author
 
 Takahito Mita

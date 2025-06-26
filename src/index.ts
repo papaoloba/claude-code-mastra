@@ -7,7 +7,11 @@ export type {
   MastraResponse,
   MastraStreamChunk,
   SessionInfo,
-  ErrorDetails
+  ErrorDetails,
+  McpServerConfig,
+  McpStdioServerConfig,
+  McpSSEServerConfig,
+  McpHttpServerConfig
 } from './types.js';
 
 // ユーティリティのエクスポート

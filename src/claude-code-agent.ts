@@ -167,6 +167,10 @@ export class ClaudeCodeAgent extends Agent {
       claudeOptions.maxThinkingTokens = options.maxThinkingTokens;
     }
 
+    if (options.mcpServers) {
+      claudeOptions.mcpServers = options.mcpServers;
+    }
+
     return claudeOptions;
   }
 

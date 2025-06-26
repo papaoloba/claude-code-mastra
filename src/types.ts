@@ -10,6 +10,29 @@ export interface ClaudeCodeAgentOptions {
   appendSystemPrompt?: string;
   customSystemPrompt?: string;
   maxThinkingTokens?: number;
+  mcpServers?: Record<string, McpServerConfig>;
+}
+
+// Claude Code SDKのMCPサーバー設定型を再定義
+export type McpServerConfig = McpStdioServerConfig | McpSSEServerConfig | McpHttpServerConfig;
+
+export interface McpStdioServerConfig {
+  type: 'stdio';
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export interface McpSSEServerConfig {
+  type: 'sse';
+  url: string;
+  headers?: Record<string, string>;
+}
+
+export interface McpHttpServerConfig {
+  type: 'http';
+  url: string;
+  headers?: Record<string, string>;
 }
 
 export interface MastraResponse {

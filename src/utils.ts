@@ -1,4 +1,4 @@
-import type { ClaudeCodeAgentOptions, SessionInfo } from './types.js';
+import type { ClaudeCodeAgentOptions, SessionInfo, McpServerConfig } from './types.js';
 
 export class SessionManager {
   private sessions = new Map<string, SessionInfo>();
@@ -56,7 +56,8 @@ export function validateOptions(options?: ClaudeCodeAgentOptions): Required<Clau
     fallbackModel: 'claude-3-5-haiku-20241022',
     appendSystemPrompt: '',
     customSystemPrompt: '',
-    maxThinkingTokens: 0
+    maxThinkingTokens: 0,
+    mcpServers: {}
   };
 
   if (!options) {
@@ -74,7 +75,8 @@ export function validateOptions(options?: ClaudeCodeAgentOptions): Required<Clau
     fallbackModel: options.fallbackModel ?? defaultOptions.fallbackModel,
     appendSystemPrompt: options.appendSystemPrompt ?? defaultOptions.appendSystemPrompt,
     customSystemPrompt: options.customSystemPrompt ?? defaultOptions.customSystemPrompt,
-    maxThinkingTokens: options.maxThinkingTokens ?? defaultOptions.maxThinkingTokens
+    maxThinkingTokens: options.maxThinkingTokens ?? defaultOptions.maxThinkingTokens,
+    mcpServers: validateMCPServers(options.mcpServers) ?? defaultOptions.mcpServers
   };
 }
 
@@ -117,6 +119,49 @@ function validateTimeout(timeout?: number): number | undefined {
     throw new Error('timeout must be a number between 1000ms (1s) and 3600000ms (1h)');
   }
   return timeout;
+}
+
+function validateMCPServers(mcpServers?: Record<string, McpServerConfig>): Record<string, McpServerConfig> | undefined {
+  if (mcpServers === undefined) return undefined;
+  
+  if (typeof mcpServers !== 'object' || mcpServers === null) {
+    throw new Error('mcpServers must be an object');
+  }
+  
+  // 各サーバー設定の検証
+  for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
+    if (!serverConfig || typeof serverConfig !== 'object') {
+      throw new Error(`mcpServers.${serverName} must be an object`);
+    }
+    
+    if (!serverConfig.type || !['stdio', 'sse', 'http'].includes(serverConfig.type)) {
+      throw new Error(`mcpServers.${serverName}.type must be one of: stdio, sse, http`);
+    }
+    
+    if (serverConfig.type === 'stdio') {
+      if (!serverConfig.command || typeof serverConfig.command !== 'string') {
+        throw new Error(`mcpServers.${serverName}.command must be a string`);
+      }
+      
+      if (serverConfig.args && !Array.isArray(serverConfig.args)) {
+        throw new Error(`mcpServers.${serverName}.args must be an array`);
+      }
+      
+      if (serverConfig.env && typeof serverConfig.env !== 'object') {
+        throw new Error(`mcpServers.${serverName}.env must be an object`);
+      }
+    } else if (serverConfig.type === 'sse' || serverConfig.type === 'http') {
+      if (!serverConfig.url || typeof serverConfig.url !== 'string') {
+        throw new Error(`mcpServers.${serverName}.url must be a string`);
+      }
+      
+      if (serverConfig.headers && typeof serverConfig.headers !== 'object') {
+        throw new Error(`mcpServers.${serverName}.headers must be an object`);
+      }
+    }
+  }
+  
+  return mcpServers;
 }
 
 export function formatError(error: unknown): string {

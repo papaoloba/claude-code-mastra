@@ -1,5 +1,5 @@
 {
-  "name": "claude-code-mastra",
+  "name": "@t3ta/claude-code-mastra",
   "version": "0.0.1",
   "type": "module",
   "main": "dist/index.js",

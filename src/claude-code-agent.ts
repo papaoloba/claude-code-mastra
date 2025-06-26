@@ -2,6 +2,15 @@ import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-code'
 import { Agent } from '@mastra/core';
 import type { ToolAction } from '@mastra/core';
 import { z } from 'zod';
+import type { 
+  GenerateTextResult, 
+  StreamTextResult,
+  GenerateObjectResult,
+  StreamObjectResult,
+  ToolCall,
+  ToolResult,
+  CoreMessage
+} from 'ai';
 import type {
   ClaudeCodeAgentOptions,
   MastraResponse,
@@ -14,6 +23,7 @@ import { SessionManager, validateOptions, formatError } from './utils.js';
 import { ToolBridge } from './tool-bridge.js';
 
 export class ClaudeCodeAgent extends Agent {
+  // Mastraの基底クラスのメソッドシグネチャと互換性を保つため、anyでオーバーライド
   private sessionManager: SessionManager;
   private messageConverter: MessageConverter;
   private claudeOptions: Required<ClaudeCodeAgentOptions>;
@@ -42,9 +52,12 @@ export class ClaudeCodeAgent extends Agent {
     // オプションをマージ
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
     
-    // Mastraツールの情報をシステムプロンプトとして追加
+    // Mastraツールがある場合は、Claude Code内蔵ツールを無効化し、Mastraツールのみを使用
     const toolsSystemPrompt = this.toolBridge.generateSystemPrompt();
     if (toolsSystemPrompt && !mergedOptions.customSystemPrompt) {
+      // Claude Code内蔵ツールを無効化
+      mergedOptions.disallowedTools = ['Task', 'Bash', 'Read', 'Write', 'Edit', 'LS', 'Glob', 'Grep'];
+      
       mergedOptions.appendSystemPrompt = mergedOptions.appendSystemPrompt 
         ? `${mergedOptions.appendSystemPrompt}\n\n${toolsSystemPrompt}`
         : toolsSystemPrompt;
@@ -60,24 +73,48 @@ export class ClaudeCodeAgent extends Agent {
       let iterationCount = 0;
       const maxIterations = 5; // 無限ループを防ぐ
 
+      console.log('🚀 Debug - Starting tool execution loop, max iterations:', maxIterations);
+      console.log('🚀 Debug - Available tools:', Object.keys(this._tools));
+
       while (iterationCount < maxIterations) {
+        console.log(`🔄 Debug - Iteration ${iterationCount + 1}/${maxIterations}`);
+        
         const iterationMessages: SDKMessage[] = [];
         await this.collectMessages(currentPrompt, claudeOptions, iterationMessages);
+        console.log('📨 Debug - Received messages count:', iterationMessages.length);
+        console.log('📨 Debug - Message types:', iterationMessages.map(m => m.type));
+        
         sdkMessages.push(...iterationMessages);
 
         // ツール呼び出しを検出
+        // Debug: simplified message logging
+        console.log('📨 Debug - Assistant messages:', iterationMessages
+          .filter(m => m.type === 'assistant')
+          .map((m, i) => `[${i}] ${m.type}`)
+        );
+        
         const lastMessage = this.getLastAssistantContent(iterationMessages);
+        console.log('🔍 Debug - Last assistant message:', lastMessage?.substring(0, 200) + '...');
+        
         if (!lastMessage) {
+          console.log('❌ Debug - No last message found');
           break;
         }
         
         const toolCall = this.toolBridge.detectToolCall(lastMessage);
+        console.log('🔍 Debug - Tool call detected:', toolCall);
+        
         if (!toolCall) {
+          console.log('❌ Debug - No tool call detected, breaking loop');
           break; // ツール呼び出しがなければ終了
         }
 
+        console.log('✅ Debug - Executing tool:', toolCall.toolName, 'with params:', toolCall.parameters);
+        
         // ツールを実行
         const toolResult = await this.toolBridge.executeTool(toolCall.toolName, toolCall.parameters);
+        console.log('✅ Debug - Tool execution result:', toolResult);
+        
         const resultMessage = this.toolBridge.formatToolResult(toolResult);
         
         currentPrompt = `${resultMessage}\n\nPlease continue with the task using this information.`;
@@ -92,27 +129,47 @@ export class ClaudeCodeAgent extends Agent {
         startTime
       );
 
-      // ツール実行履歴から toolCalls を生成
+      // ツール実行履歴から toolCalls と toolResults を生成
       const toolHistory = this.toolBridge.getExecutionHistory();
-      const toolCalls = toolHistory.length > 0 ? toolHistory.map(execution => ({
-        toolCallId: `tool_${execution.timestamp}`,
-        toolName: execution.toolName,
-        args: execution.input,
-        result: execution.output
-      })) : undefined;
+      const toolCalls: any[] = [];
+      const toolResults: any[] = [];
+
+      toolHistory.forEach(execution => {
+        const toolCallId = `call_${execution.timestamp}`;
+        
+        // ToolCall
+        toolCalls.push({
+          type: 'tool-call',
+          toolCallId,
+          toolName: execution.toolName,
+          args: execution.input
+        });
+
+        // ToolResult
+        toolResults.push({
+          type: 'tool-result',
+          toolCallId,
+          toolName: execution.toolName,
+          args: execution.input,
+          result: execution.output,
+          isError: !!execution.error
+        });
+      });
 
       return {
         text: mastraResponse.content,
-        toolCalls,
+        toolCalls: toolCalls.length > 0 ? toolCalls : [],
+        toolResults: toolResults.length > 0 ? toolResults : [],
         usage: {
           promptTokens: 0,
           completionTokens: 0,
           totalTokens: 0
         },
-        finishReason: 'stop',
+        finishReason: 'stop' as const,
         experimental_providerMetadata: {
-          ...mastraResponse.metadata,
-          toolExecutions: toolHistory
+          sessionId: mastraResponse.metadata?.sessionId || '',
+          cost: mastraResponse.metadata?.cost || 0,
+          duration: mastraResponse.metadata?.duration || 0
         }
       };
 
@@ -139,9 +196,12 @@ export class ClaudeCodeAgent extends Agent {
     // オプションをマージ
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
     
-    // Mastraツールの情報をシステムプロンプトとして追加
+    // Mastraツールがある場合は、Claude Code内蔵ツールを無効化し、Mastraツールのみを使用
     const toolsSystemPrompt = this.toolBridge.generateSystemPrompt();
     if (toolsSystemPrompt && !mergedOptions.customSystemPrompt) {
+      // Claude Code内蔵ツールを無効化
+      mergedOptions.disallowedTools = ['Task', 'Bash', 'Read', 'Write', 'Edit', 'LS', 'Glob', 'Grep'];
+      
       mergedOptions.appendSystemPrompt = mergedOptions.appendSystemPrompt 
         ? `${mergedOptions.appendSystemPrompt}\n\n${toolsSystemPrompt}`
         : toolsSystemPrompt;
@@ -212,20 +272,39 @@ export class ClaudeCodeAgent extends Agent {
       }, 30000);
     }
 
-    // ツール実行履歴から toolCalls を生成
+    // ツール実行履歴から toolCalls と toolResults を生成
     const toolHistory = this.toolBridge.getExecutionHistory();
-    const toolCalls = toolHistory.length > 0 ? toolHistory.map(execution => ({
-      toolCallId: `tool_${execution.timestamp}`,
-      toolName: execution.toolName,
-      args: execution.input,
-      result: execution.output
-    })) : undefined;
+    const toolCalls: any[] = [];
+    const toolResults: any[] = [];
+
+    toolHistory.forEach(execution => {
+      const toolCallId = `call_${execution.timestamp}`;
+      
+      // ToolCall
+      toolCalls.push({
+        type: 'tool-call',
+        toolCallId,
+        toolName: execution.toolName,
+        args: execution.input
+      });
+
+      // ToolResult
+      toolResults.push({
+        type: 'tool-result',
+        toolCallId,
+        toolName: execution.toolName,
+        args: execution.input,
+        result: execution.output,
+        isError: !!execution.error
+      });
+    });
 
     // StreamTextResultを返すために、シンプルなストリームオブジェクトを作成
     return {
-      textStream: this.createAsyncIterable(chunks),
+      textStream: this.createAsyncIterable(chunks) as any,
       text: this.getTextFromChunks(chunks),
-      toolCalls: Promise.resolve(toolCalls),
+      toolCalls: Promise.resolve(toolCalls.length > 0 ? toolCalls : []),
+      toolResults: Promise.resolve(toolResults.length > 0 ? toolResults : []),
       usage: Promise.resolve({
         promptTokens: 0,
         completionTokens: 0,
@@ -233,8 +312,7 @@ export class ClaudeCodeAgent extends Agent {
       }),
       finishReason: Promise.resolve('stop' as const),
       experimental_providerMetadata: Promise.resolve({ 
-        sessionId: session.sessionId,
-        toolExecutions: toolHistory
+        sessionId: session.sessionId
       })
     };
   }
@@ -400,11 +478,27 @@ export class ClaudeCodeAgent extends Agent {
       const message = messages[i];
       if (message && message.type === 'assistant') {
         let content: string | undefined;
+        
+        // 直接contentフィールドがある場合
         if ('content' in message && typeof message.content === 'string') {
           content = message.content;
-        } else if ('message' in message && message.message && typeof message.message === 'object' && 'content' in message.message && typeof message.message.content === 'string') {
-          content = message.message.content;
+        } 
+        // message.message.contentの構造の場合
+        else if ('message' in message && message.message && typeof message.message === 'object') {
+          const innerMessage = message.message as any;
+          if ('content' in innerMessage && typeof innerMessage.content === 'string') {
+            content = innerMessage.content;
+          }
+          // content配列の場合
+          else if (Array.isArray(innerMessage.content)) {
+            content = innerMessage.content
+              .filter((block: any) => block.type === 'text')
+              .map((block: any) => block.text)
+              .join(' ');
+          }
         }
+        
+        console.log('🔍 Debug - Extracted content:', content?.substring(0, 200) + '...');
         if (content) return content;
       }
     }

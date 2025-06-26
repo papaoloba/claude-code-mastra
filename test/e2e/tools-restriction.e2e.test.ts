@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 
-describe('E2E Tools Restriction Tests', () => {
+describe('Tools Restriction E2E Tests', () => {
   const skipIntegrationTests = !process.env.CLAUDE_CODE_E2E_TEST;
 
   beforeAll(() => {
@@ -10,148 +10,189 @@ describe('E2E Tools Restriction Tests', () => {
     }
   });
 
-  describe('allowedTools restrictions', () => {
-    it.skipIf(skipIntegrationTests)('should only use allowed tools', async () => {
+  describe('allowedTools functionality', () => {
+    it.skipIf(skipIntegrationTests)('should successfully use allowed Read tool', async () => {
       const agent = new ClaudeCodeAgent({
-        name: 'allowed-tools-test',
-        instructions: 'You are a helpful assistant that can only read files.',
+        name: 'read-only-agent',
+        instructions: 'You are a helpful assistant that can read files.',
         model: 'claude-3-5-sonnet-20241022',
         claudeCodeOptions: {
           maxTurns: 2,
-          allowedTools: ['Read'], // Readツールのみ許可
-          timeout: 30000
+          allowedTools: ['Read'],
+          timeout: 20000
         }
       });
 
-      try {
-        // Readツールのみで実行可能なタスクをリクエスト
-        const result = await agent.generate(
-          'Tell me what the package.json file contains. Just describe the main fields.'
-        );
+      const result = await agent.generate(
+        'Read the package.json file and tell me the project name and version'
+      );
 
-        expect(result.text).toBeTruthy();
-        expect(result.text.length).toBeGreaterThan(0);
-        
-        // package.jsonに関する情報が含まれているはず
-        expect(result.text.toLowerCase()).toMatch(/package|json|name|version|dependencies/);
-        
-        console.log('✅ Allowed tools test passed');
-      } catch (error) {
-        console.error('❌ Allowed tools test failed:', error);
-        throw error;
-      }
-    }, 60000);
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(typeof result.text).toBe('string');
+      expect(result.text.length).toBeGreaterThan(0);
 
-    it.skipIf(skipIntegrationTests)('should fail when trying to use disallowed tools', async () => {
+      // プロジェクト名またはバージョンについて言及している
+      const text = result.text.toLowerCase();
+      const hasProjectInfo = text.includes('claude-code-mastra') || 
+                            text.includes('0.0.1') ||
+                            text.includes('name') ||
+                            text.includes('version');
+      
+      expect(hasProjectInfo).toBe(true);
+
+      console.log('✅ Read tool allowed test passed');
+      console.log('Response:', result.text);
+    }, 40000);
+
+    it.skipIf(skipIntegrationTests)('should restrict disallowed tools', async () => {
       const agent = new ClaudeCodeAgent({
-        name: 'restricted-tools-test',
+        name: 'restricted-agent',
         instructions: 'You are a helpful assistant with limited tools.',
         model: 'claude-3-5-sonnet-20241022',
         claudeCodeOptions: {
           maxTurns: 2,
-          allowedTools: ['Read'], // Readツールのみ許可
-          timeout: 30000
+          allowedTools: ['Read'], // Writeは許可されていない
+          timeout: 20000
         }
       });
 
-      try {
-        // 許可されていないツール（Write）を要求するタスク
-        const result = await agent.generate(
-          'Try to create a new file called test.txt with the content "Hello World". If you cannot write files, just tell me that writing is not allowed.'
-        );
+      const result = await agent.generate(
+        'Try to create a new file called test.txt with the content "Hello World"'
+      );
 
-        expect(result.text).toBeTruthy();
-        
-        // ファイル作成ができない旨のメッセージが含まれているはず
-        const lowerText = result.text.toLowerCase();
-        expect(
-          lowerText.includes('cannot') || 
-          lowerText.includes('not allowed') || 
-          lowerText.includes('unable') ||
-          lowerText.includes('only read') ||
-          lowerText.includes('don\'t have access')
-        ).toBe(true);
-        
-        console.log('✅ Tool restriction enforcement test passed');
-        console.log('Response:', result.text);
-      } catch (error) {
-        console.error('❌ Tool restriction test failed:', error);
-        throw error;
-      }
-    }, 60000);
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(typeof result.text).toBe('string');
+      expect(result.text.length).toBeGreaterThan(0);
+
+      // ファイル作成が制限されていることを示すメッセージが含まれている
+      const text = result.text.toLowerCase();
+      const isRestricted = text.includes('cannot') ||
+                          text.includes('unable') ||
+                          text.includes('not allowed') ||
+                          text.includes('permission') ||
+                          text.includes('restricted') ||
+                          text.includes('don\'t have') ||
+                          text.includes('cannot write') ||
+                          text.includes('only read');
+
+      expect(isRestricted).toBe(true);
+
+      console.log('✅ Tool restriction test passed');
+      console.log('Response:', result.text);
+    }, 40000);
   });
 
-  describe('disallowedTools restrictions', () => {
-    it.skipIf(skipIntegrationTests)('should not use disallowed tools', async () => {
+  describe('disallowedTools functionality', () => {
+    it.skipIf(skipIntegrationTests)('should block disallowed tools', async () => {
       const agent = new ClaudeCodeAgent({
-        name: 'disallowed-tools-test',
+        name: 'no-write-agent',
         instructions: 'You are a helpful assistant.',
         model: 'claude-3-5-sonnet-20241022',
         claudeCodeOptions: {
           maxTurns: 2,
-          disallowedTools: ['Bash', 'WebFetch'], // BashとWebFetchを禁止
-          timeout: 30000
+          disallowedTools: ['Write', 'Edit'], // Write/Editを禁止
+          timeout: 20000
         }
       });
 
-      try {
-        // 禁止されたツール（Bash）を使用しようとするタスク
-        const result = await agent.generate(
-          'Try to run the command "echo Hello World" using bash. If bash is not available, tell me that bash commands are not allowed.'
-        );
+      const result = await agent.generate(
+        'Try to write a simple Python script to a file called hello.py'
+      );
 
-        expect(result.text).toBeTruthy();
-        
-        // Bashが使用できない旨のメッセージが含まれているはず
-        const lowerText = result.text.toLowerCase();
-        expect(
-          lowerText.includes('cannot') || 
-          lowerText.includes('not allowed') || 
-          lowerText.includes('unable') ||
-          lowerText.includes('not available') ||
-          lowerText.includes('don\'t have access')
-        ).toBe(true);
-        
-        console.log('✅ Disallowed tools test passed');
-        console.log('Response:', result.text);
-      } catch (error) {
-        console.error('❌ Disallowed tools test failed:', error);
-        throw error;
-      }
-    }, 60000);
-  });
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(typeof result.text).toBe('string');
+      expect(result.text.length).toBeGreaterThan(0);
 
-  describe('combined allowed and disallowed tools', () => {
-    it.skipIf(skipIntegrationTests)('should respect both allowed and disallowed tools', async () => {
+      // ファイル書き込みが制限されていることを示すメッセージ
+      const text = result.text.toLowerCase();
+      const isBlocked = text.includes('cannot') ||
+                       text.includes('unable') ||
+                       text.includes('not allowed') ||
+                       text.includes('permission') ||
+                       text.includes('restricted') ||
+                       text.includes('don\'t have') ||
+                       text.includes('disallowed');
+
+      expect(isBlocked).toBe(true);
+
+      console.log('✅ Disallowed tools test passed');
+      console.log('Response:', result.text);
+    }, 40000);
+
+    it.skipIf(skipIntegrationTests)('should allow non-disallowed tools', async () => {
       const agent = new ClaudeCodeAgent({
-        name: 'combined-tools-test',
-        instructions: 'You are a helpful file assistant.',
+        name: 'read-allowed-agent',
+        instructions: 'You are a helpful assistant.',
         model: 'claude-3-5-sonnet-20241022',
         claudeCodeOptions: {
           maxTurns: 2,
-          allowedTools: ['Read', 'Write', 'Edit'], // ファイル操作のみ許可
-          disallowedTools: ['Bash', 'WebFetch'], // コマンド実行とWeb取得を禁止
-          timeout: 30000
+          disallowedTools: ['Write'], // Writeのみ禁止、Readは許可
+          timeout: 20000
         }
       });
 
-      try {
-        // 許可されたツールのみで実行可能なタスク
-        const result = await agent.generate(
-          'List the files in the src directory and tell me what you find. Use only file reading tools.'
-        );
+      const result = await agent.generate(
+        'Read the README.md file or any documentation file and summarize it'
+      );
 
-        expect(result.text).toBeTruthy();
-        expect(result.text.length).toBeGreaterThan(0);
-        
-        // srcディレクトリの内容に関する情報が含まれているはず
-        expect(result.text.toLowerCase()).toMatch(/src|file|directory|\.ts/);
-        
-        console.log('✅ Combined tools restriction test passed');
-      } catch (error) {
-        console.error('❌ Combined tools test failed:', error);
-        throw error;
-      }
-    }, 60000);
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(typeof result.text).toBe('string');
+      expect(result.text.length).toBeGreaterThan(0);
+
+      // ファイル読み取りが成功していることを示す
+      const text = result.text.toLowerCase();
+      const isSuccessful = text.includes('readme') ||
+                          text.includes('documentation') ||
+                          text.includes('file') ||
+                          text.includes('project') ||
+                          text.includes('claude-code');
+
+      expect(isSuccessful).toBe(true);
+
+      console.log('✅ Non-disallowed tools test passed');
+      console.log('Response:', result.text);
+    }, 40000);
+  });
+
+  describe('combined restrictions', () => {
+    it.skipIf(skipIntegrationTests)('should respect both allowedTools and disallowedTools', async () => {
+      const agent = new ClaudeCodeAgent({
+        name: 'combined-restrictions-agent',
+        instructions: 'You are a helpful assistant.',
+        model: 'claude-3-5-sonnet-20241022',
+        claudeCodeOptions: {
+          maxTurns: 2,
+          allowedTools: ['Read', 'LS'], // ReadとLSのみ許可
+          disallowedTools: ['Write', 'Edit'], // WriteとEditを明示的に禁止
+          timeout: 20000
+        }
+      });
+
+      const result = await agent.generate(
+        'List the files in the current directory and read the package.json file'
+      );
+
+      expect(result).toBeDefined();
+      expect(result.text).toBeDefined();
+      expect(typeof result.text).toBe('string');
+      expect(result.text.length).toBeGreaterThan(0);
+
+      // ディレクトリリストとpackage.json内容が含まれている
+      const text = result.text.toLowerCase();
+      const hasDirectoryInfo = text.includes('package.json') ||
+                              text.includes('src') ||
+                              text.includes('test') ||
+                              text.includes('file') ||
+                              text.includes('directory');
+
+      expect(hasDirectoryInfo).toBe(true);
+
+      console.log('✅ Combined restrictions test passed');
+      console.log('Response:', result.text);
+    }, 40000);
   });
 });

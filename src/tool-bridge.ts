@@ -57,13 +57,14 @@ export class ToolBridge {
       return description;
     }).join('\n');
 
-    return `## Available Tools
+    return `## IMPORTANT: You MUST use these external tools for any calculations or operations
 
-You have access to the following tools that you can use to help with your tasks:
-
+Available tools:
 ${toolDescriptions}
 
-When you need to use a tool, output a JSON code block with the following format:
+**CRITICAL REQUIREMENT**: For ANY mathematical calculation, data processing, or the tasks mentioned in the tool descriptions above, you MUST use the provided tools. Do NOT perform calculations yourself.
+
+**MANDATORY FORMAT**: When you need to use a tool, you MUST respond with ONLY a JSON code block in this exact format:
 \`\`\`json
 {
   "tool": "tool_name",
@@ -74,7 +75,19 @@ When you need to use a tool, output a JSON code block with the following format:
 }
 \`\`\`
 
-After I execute the tool, I will provide you with the result, and you can continue with your response.`;
+**DO NOT** provide the answer directly. **DO NOT** calculate results yourself. **ALWAYS** use the appropriate tool first.
+
+Example: If asked "What is 25 * 4 + 10?", you must respond with:
+\`\`\`json
+{
+  "tool": "calculator",
+  "parameters": {
+    "expression": "25 * 4 + 10"
+  }
+}
+\`\`\`
+
+After the tool execution, I will provide the result and you can continue.`;
   }
 
   /**

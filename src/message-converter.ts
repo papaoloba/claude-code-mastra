@@ -6,9 +6,36 @@ import type {
 import type { SDKMessage } from '@anthropic-ai/claude-code';
 
 export class MessageConverter {
+  /**
+   * Claude Code SDKの内部表示（[tool: xxx]など）をクリーンアップ
+   */
+  private cleanClaudeCodeInternalText(text: string): string {
+    if (!text) return '';
+    
+    // Claude Code SDKの内部表示パターンを除去
+    return text
+      // [tool: xxx] パターンを除去
+      .replace(/^\[tool:\s*[^\]]+\]\s*\n*/gm, '')
+      // [Tool: xxx] パターンを除去（大文字バリエーション）
+      .replace(/^\[Tool:\s*[^\]]+\]\s*\n*/gm, '')
+      // [TOOL: xxx] パターンを除去
+      .replace(/^\[TOOL:\s*[^\]]+\]\s*\n*/gm, '')
+      // その他の類似パターン
+      .replace(/^\[[A-Za-z_]+:\s*[^\]]+\]\s*\n*/gm, '')
+      // 行頭の空白行を除去
+      .replace(/^\s*\n/gm, '')
+      // 文字列の前後の余分な空白を除去
+      .trim();
+  }
+
   private extractContentFromMessage(message: any): string {
+    // Claude Code SDKのメッセージは直接contentフィールドを持つ場合がある
+    if (typeof message === 'string') {
+      return this.cleanClaudeCodeInternalText(message);
+    }
+    
     if (typeof message.content === 'string') {
-      return message.content;
+      return this.cleanClaudeCodeInternalText(message.content);
     }
 
     if (Array.isArray(message.content)) {
@@ -18,13 +45,15 @@ export class MessageConverter {
             return '';
           }
           if (block.type === 'text' && block.text) {
-            return block.text;
+            return this.cleanClaudeCodeInternalText(block.text);
           }
           if (block.type === 'tool_use') {
-            return `[Tool: ${block.name}]`;
+            // ツール使用の詳細は表示しない（内部処理）
+            return '';
           }
           if (block.type === 'tool_result') {
-            return `[Tool Result: ${block.content || 'completed'}]`;
+            // ツール結果の内容のみを返す（メタデータは除く）
+            return typeof block.content === 'string' ? block.content : '';
           }
           return '';
         })
@@ -133,7 +162,7 @@ export class MessageConverter {
             return '';
           }
           if (block.type === 'text' && block.text) {
-            return block.text;
+            return this.cleanClaudeCodeInternalText(block.text);
           }
           if (block.type === 'image') {
             return '[Image]';

@@ -335,6 +335,70 @@ npm run build
 npm run test:watch
 ```
 
+## セキュリティと制限事項
+
+### 現在の制限事項
+
+現在の実装では、Claude Code SDKの内蔵ツール制限機能（`allowedTools`/`disallowedTools`）が一部正常に動作していません。以下のセキュリティリスクに注意してください：
+
+#### **高リスク**
+
+1. **意図しないファイル操作**
+   ```typescript
+   // Write, Edit, Bashツールが制限されていない場合
+   agent.generate("重要なファイルを削除して");
+   // → 実際にファイル操作が実行される可能性
+   ```
+
+2. **任意コマンド実行**
+   ```typescript
+   // Bashツールによる任意のシステムコマンド実行
+   agent.generate("npm install malicious-package");
+   // → システムに変更が加えられる可能性
+   ```
+
+3. **システムリソースの濫用**
+   ```typescript
+   // 無制限のファイル読み込み
+   agent.generate("すべてのファイルを読み込んで");
+   // → 大量のI/O処理によるシステム負荷
+   ```
+
+#### **推奨対策**
+
+1. **本番環境での使用時は注意深く制御する**
+   - 信頼できる入力のみを処理
+   - 重要なファイルがないサンドボックス環境での実行
+   - 適切な権限設定
+
+2. **Mastraツールを優先使用**
+   ```typescript
+   // 安全なカスタムツールを定義して使用
+   const agent = new ClaudeCodeAgent({
+     tools: {
+       safeTool: {
+         description: '安全な操作のみ実行',
+         // 制御された実装
+       }
+     }
+   });
+   ```
+
+3. **セッション監視**
+   ```typescript
+   // セッション情報を監視してコスト制御
+   const sessions = agent.getAllActiveSessions();
+   sessions.forEach(session => {
+     if (session.totalCost > threshold) {
+       agent.stopSession(session.sessionId);
+     }
+   });
+   ```
+
+### 修正予定
+
+ツール制限機能は将来のアップデートで修正予定です。現在はMastraツール統合の核心機能（ツール実行、結果返却、セッション管理）が正常に動作しています。
+
 ## ライセンス
 
 ISC

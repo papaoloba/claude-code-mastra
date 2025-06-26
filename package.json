@@ -1,0 +1,30 @@
+{
+  "name": "claude-code-mastra",
+  "version": "0.0.1",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run --exclude='**/*.e2e.test.ts'",
+    "test:unit": "vitest run --exclude='**/*.e2e.test.ts' --exclude='**/integration.test.ts'",
+    "test:integration": "vitest run integration.test.ts",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:all": "vitest run",
+    "test:watch": "vitest --exclude='**/*.e2e.test.ts'",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage --exclude='**/*.e2e.test.ts'",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "author": "Takahito Mita",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.35",
+    "@mastra/core": "^0.10.8"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.4",
+    "@vitest/ui": "^3.2.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

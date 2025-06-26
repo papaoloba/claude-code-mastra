@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { MessageConverter } from './message-converter.js';
+import { MessageConverter } from '../../src/message-converter.js';
 import type { SDKMessage } from '@anthropic-ai/claude-code';
 
 describe('MessageConverter', () => {

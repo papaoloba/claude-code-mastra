@@ -1,22 +1,38 @@
 {
   "name": "claude-code-mastra",
   "version": "0.0.1",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "test": "vitest run --exclude='**/*.e2e.test.ts'",
-    "test:unit": "vitest run --exclude='**/*.e2e.test.ts' --exclude='**/integration.test.ts'",
-    "test:integration": "vitest run integration.test.ts",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "test:all": "vitest run",
-    "test:watch": "vitest --exclude='**/*.e2e.test.ts'",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage --exclude='**/*.e2e.test.ts'",
+    "test": "vitest run --config config/vitest.config.ts",
+    "test:unit": "vitest run --config config/vitest.config.ts test/unit",
+    "test:integration": "vitest run --config config/vitest.config.ts test/integration",
+    "test:e2e": "vitest run --config config/vitest.e2e.config.ts",
+    "test:all": "npm run test && npm run test:e2e",
+    "test:watch": "vitest --config config/vitest.config.ts",
+    "test:ui": "vitest --ui --config config/vitest.config.ts",
+    "test:coverage": "vitest run --coverage --config config/vitest.config.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit"
   },
   "author": "Takahito Mita",
   "license": "ISC",
-  "description": "",
+  "description": "Claude Code SDK integration for Mastra framework",
+  "keywords": ["claude", "claude-code", "mastra", "ai", "typescript", "sdk"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t3ta/claude-code-mastra.git"
+  },
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.35",
     "@mastra/core": "^0.10.8"

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, beforeAll } from 'vitest';
-import { ClaudeCodeAgent } from './claude-code-agent.js';
+import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 
 // 実際のClaude Code SDKを使用（モックなし）
 // 注意: このテストは実際のClaude Code環境が必要です

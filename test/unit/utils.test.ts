@@ -5,8 +5,8 @@ import {
   formatError, 
   createTimeoutPromise, 
   sleep 
-} from './utils.js';
-import type { ClaudeCodeAgentOptions } from './types.js';
+} from '../../src/utils.js';
+import type { ClaudeCodeAgentOptions } from '../../src/types.js';
 
 describe('SessionManager', () => {
   let sessionManager: SessionManager;

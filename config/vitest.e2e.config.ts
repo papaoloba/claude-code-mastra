@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['**/*.e2e.test.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
+    include: ['test/**/*.e2e.test.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
     exclude: ['**/node_modules/**', '**/dist/**'],
     testTimeout: 60000, // 60秒タイムアウト（実際のAPI呼び出しのため）
     hookTimeout: 30000,
@@ -22,12 +22,12 @@ export default defineConfig({
     // レポーター設定
     reporter: ['verbose', 'json'],
     outputFile: {
-      json: './test-results/e2e-results.json'
+      json: '../test-results/e2e-results.json'
     }
   },
   resolve: {
     alias: {
-      '@': new URL('./', import.meta.url).pathname
+      '@': new URL('../src', import.meta.url).pathname
     }
   }
 });

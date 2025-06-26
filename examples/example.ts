@@ -1,5 +1,5 @@
-import { ClaudeCodeAgent } from './claude-code-agent.js';
-import type { ClaudeCodeAgentOptions } from './types.js';
+import { ClaudeCodeAgent } from '../src/claude-code-agent.js';
+import type { ClaudeCodeAgentOptions } from '../src/types.js';
 
 async function basicUsageExample() {
   console.log('=== Basic Usage Example ===');

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ClaudeCodeAgent } from './claude-code-agent.js';
-import { MessageConverter } from './message-converter.js';
-import { SessionManager } from './utils.js';
+import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
+import { MessageConverter } from '../../src/message-converter.js';
+import { SessionManager } from '../../src/utils.js';
 import type { SDKMessage } from '@anthropic-ai/claude-code';
 
 // Claude Code SDKをモック (統合テストでもモックを使用してコンポーネント間の統合をテスト)

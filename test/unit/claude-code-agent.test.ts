@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ClaudeCodeAgent } from './claude-code-agent.js';
+import { ClaudeCodeAgent } from '../../src/claude-code-agent.js';
 import type { SDKMessage } from '@anthropic-ai/claude-code';
 
 // Claude Code SDKをモック

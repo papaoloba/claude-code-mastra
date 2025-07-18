@@ -1,0 +1,35 @@
+# Source files
+src/
+test/
+examples/
+
+# Config files
+config/
+tsconfig.json
+vitest.config.ts
+vitest.e2e.config.ts
+mise.toml
+
+# Coverage and test results
+coverage/
+test-results/
+*.log
+
+# Development files
+.git/
+.github/
+node_modules/
+*.map
+
+# Documentation source
+CLAUDE.md
+CLAUDE.local.md
+README.ja.md
+
+# Temporary files
+*.tmp
+*.temp
+.DS_Store
+
+# Debug files
+test/debug/

@@ -14,6 +14,7 @@
     "dist"
   ],
   "scripts": {
+    "dev": "mastra dev",
     "test": "vitest run --config config/vitest.config.ts",
     "test:unit": "vitest run --config config/vitest.config.ts test/unit",
     "test:integration": "vitest run --config config/vitest.config.ts test/integration",
@@ -22,7 +23,7 @@
     "test:watch": "vitest --config config/vitest.config.ts",
     "test:ui": "vitest --ui --config config/vitest.config.ts",
     "test:coverage": "vitest run --coverage --config config/vitest.config.ts",
-    "build": "tsc",
+    "build": "tsc && mastra build",
     "typecheck": "tsc --noEmit"
   },
   "author": "Takahito Mita",
@@ -41,14 +42,21 @@
     "url": "https://github.com/t3ta/claude-code-mastra.git"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^2.0.0",
+    "@ai-sdk/openai": "^2.0.0",
     "@anthropic-ai/claude-code": "^1.0.35",
-    "@mastra/core": "^0.10.8"
+    "@mastra/core": "^0.12.1",
+    "@mastra/libsql": "^0.12.0",
+    "@mastra/memory": "^0.12.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^24.0.4",
+    "@types/node": "^24.1.0",
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
-    "typescript": "^5.8.3",
+    "mastra": "^0.10.18",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }
 }

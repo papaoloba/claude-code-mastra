@@ -1,23 +1,55 @@
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-code';
 import { Agent } from '@mastra/core';
 import type { ToolAction } from '@mastra/core';
+// import { MastraAgentStream } from '@mastra/core/stream/MastraAgentStream';
 import { z } from 'zod';
 import type { 
-  GenerateTextResult, 
-  StreamTextResult,
-  GenerateObjectResult,
-  StreamObjectResult,
-  ToolCall,
-  ToolResult,
   CoreMessage
 } from 'ai';
 import type {
   ClaudeCodeAgentOptions,
-  MastraResponse,
   MastraStreamChunk,
   SessionInfo,
   ToolsInput
 } from './types.js';
+import type { 
+  GenerateTextResult,
+  GenerateObjectResult,
+  StreamTextResult,
+  StreamObjectResult
+} from '@mastra/core';
+import type { ZodSchema } from 'zod';
+import type { JSONSchema7 } from 'json-schema';
+
+// Define agent option types locally to avoid import issues
+type AgentGenerateOptions<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  instructions?: string;
+  maxSteps?: number;
+  output?: OUTPUT;
+  experimental_output?: EXPERIMENTAL_OUTPUT;
+  [key: string]: any;
+};
+
+type AgentStreamOptions<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined> = {
+  instructions?: string;
+  maxSteps?: number;
+  output?: OUTPUT;
+  experimental_output?: EXPERIMENTAL_OUTPUT;
+  [key: string]: any;
+};
+
+type AiMessageType = {
+  role: string;
+  content: string;
+  [key: string]: any;
+};
+
+type UIMessageWithMetadata = {
+  role: string;
+  content: string;
+  metadata?: any;
+  [key: string]: any;
+};
 import { MessageConverter } from './message-converter.js';
 import { SessionManager, validateOptions, formatError } from './utils.js';
 import { ToolBridge } from './tool-bridge.js';
@@ -39,12 +71,34 @@ export class ClaudeCodeAgent extends Agent {
     this.toolBridge = new ToolBridge(this._tools);
   }
 
-  async generate(
-    messages: string | string[] | any[],
-    args?: any
-  ): Promise<any> {
+  // Override generate method with proper Mastra signature
+  public override async generate<
+    Tools extends ToolSet,
+    Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+    ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    optionsOrMessages: AgentGenerateOptions<Output, ExperimentalOutput> | any,
+    legacyOptions?: any
+  ): Promise<GenerateReturn<Tools, Output, ExperimentalOutput>> {
 
-    console.log('🚀 Debug - Starting generate');
+    console.log('🚀 Debug - Starting generate with params:', typeof optionsOrMessages, !!legacyOptions);
+
+    // Handle both calling conventions for compatibility
+    let options: AgentGenerateOptions<Output, ExperimentalOutput>;
+    let messages: any[];
+    
+    if (typeof optionsOrMessages === 'object' && !Array.isArray(optionsOrMessages) && 'messages' in optionsOrMessages) {
+      // Standard Mastra style: generate(options)
+      options = optionsOrMessages;
+      messages = options.messages || [];
+    } else {
+      // Legacy style: generate(messages, options) - used by Mastra server
+      messages = Array.isArray(optionsOrMessages) ? optionsOrMessages : [optionsOrMessages];
+      options = legacyOptions || {};
+    }
+    
+    console.log('🚀 Debug - Extracted messages:', messages.length);
+    console.log('🚀 Debug - Options:', Object.keys(options));
 
     const session = this.sessionManager.createSession();
     const prompt = this.extractPromptFromMessages(messages);
@@ -54,7 +108,7 @@ export class ClaudeCodeAgent extends Agent {
     this.toolBridge.clearHistory();
     
     // オプションをマージ
-    const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
+    const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(options) };
     console.log('🚀 Debug - Merged options:', mergedOptions);
 
     // Mastraツールがある場合は、Claude Code内蔵ツールを無効化し、Mastraツールのみを使用
@@ -169,25 +223,113 @@ export class ClaudeCodeAgent extends Agent {
         });
       });
 
-      const response = {
-        text: mastraResponse.content,
-        toolCalls: toolCalls.length > 0 ? toolCalls : [],
-        toolResults: toolResults.length > 0 ? toolResults : [],
-        usage: {
-          promptTokens: 0,
-          completionTokens: 0,
-          totalTokens: 0
-        },
-        finishReason: 'stop' as const,
-        experimental_providerMetadata: {
-          sessionId: mastraResponse.metadata?.sessionId || '',
-          cost: mastraResponse.metadata?.cost || 0,
-          duration: mastraResponse.metadata?.duration || 0
-        }
+      // Check if structured output is requested
+      const hasOutput = options?.output || options?.structuredOutput;
+      const hasExperimentalOutput = options?.experimental_output;
+      
+      if (hasOutput) {
+        // Return GenerateObjectResult for structured output
+        const objectResponse: GenerateObjectResult<any> = {
+          object: {}, // This would need to be parsed from the actual response
+          finishReason: 'stop' as const,
+          usage: {
+            totalTokens: 0,
+            promptTokens: 0,
+            completionTokens: 0
+          },
+          warnings: undefined,
+          logprobs: undefined,
+          providerMetadata: {
+            claudeCode: {
+              sessionId: mastraResponse.metadata?.sessionId || '',
+              cost: mastraResponse.metadata?.cost || 0,
+              duration: mastraResponse.metadata?.duration || 0
+            }
+          } as any,
+          experimental_providerMetadata: {
+            claudeCode: {
+              sessionId: mastraResponse.metadata?.sessionId || '',
+              cost: mastraResponse.metadata?.cost || 0,
+              duration: mastraResponse.metadata?.duration || 0
+            }
+          } as any,
+          request: {
+            body: JSON.stringify({ messages, ...options })
+          } as any,
+          response: {
+            id: session.sessionId,
+            timestamp: new Date(),
+            modelId: mergedOptions.model || 'claude-3-5-sonnet-20241022'
+          } as any,
+          toJsonResponse: () => new Response(JSON.stringify({
+            object: {},
+            finishReason: 'stop' as const,
+            usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 }
+          }), { 
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        };
+        return objectResponse;
       }
+      
+      // Create the assistant response message
+      const responseMessage: CoreMessage = {
+        role: 'assistant',
+        content: mastraResponse.content || ''
+      };
 
-      console.log('🚀 Debug - Exiting generate: ', response);
-      return response;
+      // Create a response that matches GenerateTextResult interface
+      const response: GenerateTextResult<any, any> = {
+        // Core properties
+        text: mastraResponse.content || '',
+        toolCalls: toolCalls,
+        toolResults: toolResults,
+        finishReason: 'stop' as const,
+        usage: {
+          totalTokens: 0,
+          promptTokens: 0,
+          completionTokens: 0
+        },
+        // Required properties for AI SDK compatibility
+        steps: [],
+        request: {
+          body: JSON.stringify({ messages, ...options })
+        } as any,
+        response: {
+          id: session.sessionId,
+          timestamp: new Date(),
+          modelId: mergedOptions.model || 'claude-3-5-sonnet-20241022',
+          messages: [responseMessage]  // Add messages array like in dummy agent
+        } as any,
+        logprobs: undefined,
+        providerMetadata: {
+          claudeCode: {
+            sessionId: mastraResponse.metadata?.sessionId || '',
+            cost: mastraResponse.metadata?.cost || 0,
+            duration: mastraResponse.metadata?.duration || 0
+          }
+        } as any,
+        warnings: undefined,
+        // Optional properties - only include object if experimental output is requested
+        ...(hasExperimentalOutput && { object: {} }),
+        reasoning: undefined,
+        files: [],
+        reasoningDetails: [],
+        sources: [],
+        runId: options.runId || session.sessionId  // Add runId like in dummy agent
+      } as any;
+
+      console.log('🚀 Debug - Final response text:', response.text);
+      console.log('🚀 Debug - Response type check:', 'text' in response, 'finishReason' in response);
+      console.log('🚀 Debug - Response structure:', Object.keys(response));
+      console.log('🚀 Debug - Text is string:', typeof response.text === 'string');
+      console.log('🚀 Debug - Text is not empty:', response.text.length > 0);
+      
+      // Ensure the response is a plain object (not a class instance)
+      const plainResponse = JSON.parse(JSON.stringify(response));
+      console.log('🚀 Debug - Returning plain object response');
+      return plainResponse;
 
     } catch (error) {
       this.sessionManager.endSession(session.sessionId);
@@ -199,21 +341,53 @@ export class ClaudeCodeAgent extends Agent {
     }
   }
 
-  async stream(
-    messages: string | string[] | any[],
-    args?: any
-  ): Promise<any> {
+  // Stream method overloads to match Mastra Agent interface
+  async stream<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: never;
+    }
+  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? any : unknown>>;
+  
+  async stream<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    args?: AgentStreamOptions<OUTPUT, undefined> & {
+      output?: OUTPUT;
+      experimental_output?: never;
+    }
+  ): Promise<StreamObjectResult<any>>;
+  
+  async stream<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(
+    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
+    args?: AgentStreamOptions<undefined, EXPERIMENTAL_OUTPUT> & {
+      output?: never;
+      experimental_output?: EXPERIMENTAL_OUTPUT;
+    }
+  ): Promise<StreamTextResult<any, EXPERIMENTAL_OUTPUT extends ZodSchema ? any : unknown> & {
+    partialObjectStream: any;
+  }>;
+  
+  // Override stream method with proper Mastra signature  
+  public override async stream<
+    Tools extends ToolSet,
+    Output extends ZodSchema | JSONSchema7 | undefined = undefined,
+    ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
+  >(
+    options: AgentStreamOptions<Output, ExperimentalOutput>,
+  ): Promise<MastraAgentStream<Tools, Output, ExperimentalOutput>> {
 
-    console.log('🚀 Debug - Starting stream');
+    console.log('🚀 Debug - Starting stream with options:', Object.keys(options));
 
     const session = this.sessionManager.createSession();
+    const messages = options.messages || [];
     const prompt = this.extractPromptFromMessages(messages);
     
     // ツール履歴をクリア
     this.toolBridge.clearHistory();
     
     // オプションをマージ
-    const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
+    const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(options) };
     
     // Mastraツールがある場合は、Claude Code内蔵ツールを無効化し、Mastraツールのみを使用
     const toolsSystemPrompt = this.toolBridge.generateSystemPrompt();
@@ -318,7 +492,8 @@ export class ClaudeCodeAgent extends Agent {
       });
     });
 
-    // StreamTextResultを返すために、シンプルなストリームオブジェクトを作成
+    // Return a simple stream result for now
+    // TODO: Replace with MastraAgentStream when import is resolved
     return {
       textStream: this.createAsyncIterable(chunks) as any,
       text: this.getTextFromChunks(chunks),
@@ -333,7 +508,7 @@ export class ClaudeCodeAgent extends Agent {
       experimental_providerMetadata: Promise.resolve({ 
         sessionId: session.sessionId
       })
-    };
+    } as any;
   }
 
   private async collectMessages(
@@ -538,118 +713,7 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   // ヘルパーメソッド
-  private generateToolsPrompt(): string {
-    console.log('🚀 Debug - Generating tools prompt');
-    const toolNames = this.getToolNames();
-    if (toolNames.length === 0) {
-      return '';
-    }
-
-    const toolDescriptions = toolNames.map(name => {
-      const tool = this._tools[name];
-      let description = `- ${name}: ${tool.description}`;
-      
-      // 入力スキーマの情報を追加
-      if (tool.inputSchema) {
-        try {
-          // Zodスキーマから型情報を抽出
-          const shape = (tool.inputSchema as any)._def?.shape?.() || {};
-          const params = Object.entries(shape).map(([key, value]: [string, any]) => {
-            const type = value._def?.typeName?.replace('Zod', '').toLowerCase() || 'unknown';
-            const isOptional = value.isOptional?.() || false;
-            return `${key}: ${type}${isOptional ? ' (optional)' : ''}`;
-          }).join(', ');
-          
-          if (params) {
-            description += ` [Parameters: ${params}]`;
-          }
-        } catch (e) {
-          // スキーマの解析に失敗した場合は無視
-        }
-      }
-      
-      return description;
-    }).join('\n');
-
-    return `You have access to the following custom tools:\n${toolDescriptions}\n\nWhen you need to use one of these tools, respond with a special format:\n<tool_use>\n<tool_name>TOOL_NAME</tool_name>\n<parameters>\n{\n  "param1": "value1",\n  "param2": "value2"\n}\n</parameters>\n</tool_use>\n\nAfter using a tool, I will provide you with the result and you can continue with the task.`;
-  }
-
-  private detectToolCall(messages: SDKMessage[]): { toolName: string; input: any } | null {
-    console.log('🚀 Debug - Detecting tool call: ', messages);
-    // メッセージからツール呼び出しを検出
-    for (const message of messages) {
-      if (message && message.type === 'assistant') {
-        // SDKAssistantMessageのcontentフィールドを取得
-        let content: string | undefined;
-        if ('content' in message && typeof message.content === 'string') {
-          content = message.content;
-        } else if ('message' in message && message.message && typeof message.message === 'object' && 'content' in message.message && typeof message.message.content === 'string') {
-          content = message.message.content;
-        }
-        
-        if (!content) continue;
-        
-        // デバッグ: contentを確認
-        if (process.env.DEBUG_TOOLS) {
-          console.log('🔍 Checking message for tool calls:', content.substring(0, 200) + '...');
-        }
-        
-        // XMLタグ形式のツール呼び出しを検出
-        const toolUseMatch = content.match(/<tool_use>\s*<tool_name>([^<]+)<\/tool_name>\s*<parameters>\s*([\s\S]*?)\s*<\/parameters>\s*<\/tool_use>/i);
-        if (toolUseMatch) {
-          const toolName = toolUseMatch[1].trim();
-          const parametersStr = toolUseMatch[2].trim();
-          
-          if (process.env.DEBUG_TOOLS) {
-            console.log('✅ Tool call detected:', toolName);
-            console.log('📄 Parameters:', parametersStr);
-          }
-          
-          try {
-            const input = JSON.parse(parametersStr);
-            return { toolName, input };
-          } catch (e) {
-            // JSONパースエラーの場合は空オブジェクトを使用
-            if (process.env.DEBUG_TOOLS) {
-              console.log('⚠️ JSON parse error, using empty object');
-            }
-            return { toolName, input: {} };
-          }
-        }
-        
-        // 代替形式: "I want to use the X tool with Y parameters"
-        const naturalMatch = content.match(/(?:i want to use|let me use|using|use) (?:the )?([\w]+) tool.*?(?:with|parameters?:?)\s*([\{\[].*?[\}\]]|\w+.*)/is);
-        if (naturalMatch) {
-          const toolName = naturalMatch[1];
-          const paramsText = naturalMatch[2];
-          
-          try {
-            const input = JSON.parse(paramsText);
-            return { toolName, input };
-          } catch (e) {
-            // 自然言語からパラメータを抽出する試み
-            const params: Record<string, any> = {};
-            const tool = this._tools[toolName];
-            if (tool && tool.inputSchema) {
-              // スキーマに基づいてパラメータを抽出
-              const shape = (tool.inputSchema as any)._def?.shape?.() || {};
-              for (const key of Object.keys(shape)) {
-                const regex = new RegExp(`${key}[:\s]+([^,\s]+)`, 'i');
-                const match = paramsText.match(regex);
-                if (match) {
-                  params[key] = match[1];
-                }
-              }
-            }
-            return Object.keys(params).length > 0 ? { toolName, input: params } : null;
-          }
-        }
-      }
-    }
-    
-    return null;
-  }
-  private extractPromptFromMessages(messages: string | string[] | any[]): string {
+  private extractPromptFromMessages(messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]): string {
     console.log('🚀 Debug - Extracting prompt from messages: ', messages);
     if (typeof messages === 'string') {
       return messages;

@@ -69,15 +69,29 @@ export class MessageConverter {
     sessionId: string,
     startTime: number
   ): MastraResponse {
+    console.log('🔍 Debug - Converting SDK messages:', messages.length, 'messages');
+    console.log('🔍 Debug - Message types:', messages.map(m => m.type));
+    
     const assistantMessages = messages.filter(msg => msg.type === 'assistant');
     const resultMessage = messages.find(msg => msg.type === 'result');
 
+    console.log('🔍 Debug - Assistant messages:', assistantMessages.length);
+    console.log('🔍 Debug - Has result message:', !!resultMessage);
+
     let content = '';
     if (assistantMessages.length > 0) {
-      content = assistantMessages.map(msg => this.extractContentFromMessage(msg.message)).join('\n\n');
+      const extractedContents = assistantMessages.map(msg => {
+        const extracted = this.extractContentFromMessage(msg.message);
+        console.log('🔍 Debug - Extracted content from assistant:', extracted?.substring(0, 100) + '...');
+        return extracted;
+      });
+      content = extractedContents.join('\n\n');
     } else if (resultMessage && 'result' in resultMessage) {
       content = resultMessage.result || '';
+      console.log('🔍 Debug - Using result message content:', content?.substring(0, 100) + '...');
     }
+
+    console.log('🔍 Debug - Final content:', content?.substring(0, 100) + '...');
 
     const duration = Date.now() - startTime;
     const isError = resultMessage ? resultMessage.is_error : false;

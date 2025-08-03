@@ -3,6 +3,9 @@ src/
 test/
 examples/
 
+# Mastra
+.mastra/
+
 # Config files
 config/
 tsconfig.json

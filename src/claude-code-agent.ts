@@ -43,21 +43,28 @@ export class ClaudeCodeAgent extends Agent {
     messages: string | string[] | any[],
     args?: any
   ): Promise<any> {
+
+    console.log('🚀 Debug - Starting generate');
+
     const session = this.sessionManager.createSession();
     const prompt = this.extractPromptFromMessages(messages);
     
     // ツール履歴をクリア
+    console.log('🚀 Debug - Clearing tool history');
     this.toolBridge.clearHistory();
     
     // オプションをマージ
     const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(args) };
-    
+    console.log('🚀 Debug - Merged options:', mergedOptions);
+
     // Mastraツールがある場合は、Claude Code内蔵ツールを無効化し、Mastraツールのみを使用
     const toolsSystemPrompt = this.toolBridge.generateSystemPrompt();
+    console.log('🚀 Debug - Tools system prompt:', toolsSystemPrompt);
+
     if (toolsSystemPrompt && !mergedOptions.customSystemPrompt) {
       // Claude Code内蔵ツールを無効化
       mergedOptions.disallowedTools = ['Task', 'Bash', 'Read', 'Write', 'Edit', 'LS', 'Glob', 'Grep'];
-      
+      console.log('🚀 Debug - Disallowed tools:', mergedOptions.disallowedTools);
       mergedOptions.appendSystemPrompt = mergedOptions.appendSystemPrompt 
         ? `${mergedOptions.appendSystemPrompt}\n\n${toolsSystemPrompt}`
         : toolsSystemPrompt;
@@ -65,6 +72,7 @@ export class ClaudeCodeAgent extends Agent {
     
     try {
       const claudeOptions = this.createClaudeCodeOptions(mergedOptions);
+      console.log('🚀 Debug - Created Claude options:', claudeOptions);
       const sdkMessages: SDKMessage[] = [];
       const startTime = Date.now();
 
@@ -78,8 +86,9 @@ export class ClaudeCodeAgent extends Agent {
 
       while (iterationCount < maxIterations) {
         console.log(`🔄 Debug - Iteration ${iterationCount + 1}/${maxIterations}`);
-        
+
         const iterationMessages: SDKMessage[] = [];
+        console.log('🚀 Debug - Collecting messages: ', currentPrompt);
         await this.collectMessages(currentPrompt, claudeOptions, iterationMessages);
         console.log('📨 Debug - Received messages count:', iterationMessages.length);
         console.log('📨 Debug - Message types:', iterationMessages.map(m => m.type));
@@ -121,13 +130,17 @@ export class ClaudeCodeAgent extends Agent {
         iterationCount++;
       }
 
+      console.log('🚀 Debug - Ending session');
       this.sessionManager.endSession(session.sessionId);
-      
+
+      console.log('🚀 Debug - Converting SDK messages to Mastra response');
       const mastraResponse = this.messageConverter.convertSDKMessageToMastraResponse(
         sdkMessages,
         session.sessionId,
         startTime
       );
+
+      console.log('🚀 Debug - Converted SDK messages to Mastra response: ', mastraResponse);
 
       // ツール実行履歴から toolCalls と toolResults を生成
       const toolHistory = this.toolBridge.getExecutionHistory();
@@ -156,7 +169,7 @@ export class ClaudeCodeAgent extends Agent {
         });
       });
 
-      return {
+      const response = {
         text: mastraResponse.content,
         toolCalls: toolCalls.length > 0 ? toolCalls : [],
         toolResults: toolResults.length > 0 ? toolResults : [],
@@ -171,7 +184,10 @@ export class ClaudeCodeAgent extends Agent {
           cost: mastraResponse.metadata?.cost || 0,
           duration: mastraResponse.metadata?.duration || 0
         }
-      };
+      }
+
+      console.log('🚀 Debug - Exiting generate: ', response);
+      return response;
 
     } catch (error) {
       this.sessionManager.endSession(session.sessionId);
@@ -187,6 +203,9 @@ export class ClaudeCodeAgent extends Agent {
     messages: string | string[] | any[],
     args?: any
   ): Promise<any> {
+
+    console.log('🚀 Debug - Starting stream');
+
     const session = this.sessionManager.createSession();
     const prompt = this.extractPromptFromMessages(messages);
     
@@ -322,7 +341,10 @@ export class ClaudeCodeAgent extends Agent {
     claudeOptions: Options,
     messages: SDKMessage[]
   ): Promise<void> {
+    console.log('🚀 Debug - starting collectMessages');
+
     for await (const message of query({ prompt, options: claudeOptions })) {
+      console.log('🚀 Debug - Collected message:', message);
       messages.push(message);
     }
   }
@@ -405,28 +427,34 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   async stopSession(sessionId: string): Promise<void> {
+    console.log('🚀 Debug - Stopping session: ', sessionId);
     this.sessionManager.endSession(sessionId);
   }
 
   // Claude Code固有のメソッド
   updateClaudeCodeOptions(options: Partial<ClaudeCodeAgentOptions>): void {
+    console.log('🚀 Debug - Updating Claude Code options: ', options);
     this.claudeOptions = validateOptions({ ...this.claudeOptions, ...options });
   }
 
   getClaudeCodeOptions(): Required<ClaudeCodeAgentOptions> {
+    console.log('🚀 Debug - Getting Claude Code options: ', this.claudeOptions);
     return { ...this.claudeOptions };
   }
 
   // Mastra Agent Tools メソッド
   getTools(): ToolsInput {
+    console.log('🚀 Debug - Getting tools: ', this._tools);
     return { ...this._tools };
   }
 
   getToolNames(): string[] {
+    console.log('🚀 Debug - Getting tool names: ', Object.keys(this._tools));
     return Object.keys(this._tools);
   }
 
   getToolDescriptions(): Record<string, string> {
+    console.log('🚀 Debug - Getting tool descriptions: ', Object.entries(this._tools));
     const descriptions: Record<string, string> = {};
     for (const [name, tool] of Object.entries(this._tools)) {
       descriptions[name] = tool.description;
@@ -435,6 +463,7 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   async executeTool(toolName: string, input: any): Promise<any> {
+    console.log('🚀 Debug - Executing tool: ', toolName, input);
     const tool = this._tools[toolName];
     if (!tool) {
       throw new Error(`Tool "${toolName}" not found`);
@@ -465,14 +494,17 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   addTool(name: string, tool: ToolAction<any, any, any>): void {
+    console.log('🚀 Debug - Adding tool: ', name, tool);
     this._tools[name] = tool;
   }
 
   removeTool(name: string): void {
+    console.log('🚀 Debug - Removing tool: ', name);
     delete this._tools[name];
   }
 
   private getLastAssistantContent(messages: SDKMessage[]): string | null {
+    console.log('🚀 Debug - Getting last assistant content: ', messages);
     // 最後のアシスタントメッセージの内容を取得
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
@@ -507,6 +539,7 @@ export class ClaudeCodeAgent extends Agent {
 
   // ヘルパーメソッド
   private generateToolsPrompt(): string {
+    console.log('🚀 Debug - Generating tools prompt');
     const toolNames = this.getToolNames();
     if (toolNames.length === 0) {
       return '';
@@ -542,6 +575,7 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   private detectToolCall(messages: SDKMessage[]): { toolName: string; input: any } | null {
+    console.log('🚀 Debug - Detecting tool call: ', messages);
     // メッセージからツール呼び出しを検出
     for (const message of messages) {
       if (message && message.type === 'assistant') {
@@ -616,6 +650,7 @@ export class ClaudeCodeAgent extends Agent {
     return null;
   }
   private extractPromptFromMessages(messages: string | string[] | any[]): string {
+    console.log('🚀 Debug - Extracting prompt from messages: ', messages);
     if (typeof messages === 'string') {
       return messages;
     }
@@ -632,6 +667,7 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   private extractClaudeOptionsFromArgs(args?: any): Partial<ClaudeCodeAgentOptions> {
+    console.log('🚀 Debug - Extracting Claude Code options from args: ', args);
     if (!args) return {};
     
     return {
@@ -641,6 +677,7 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   private async *createAsyncIterable(chunks: MastraStreamChunk[]): AsyncIterable<string> {
+    console.log('🚀 Debug - Creating async iterable: ', chunks);
     for (const chunk of chunks) {
       if (chunk.type === 'content' && chunk.data.content) {
         yield chunk.data.content;
@@ -649,6 +686,7 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   private getTextFromChunks(chunks: MastraStreamChunk[]): Promise<string> {
+    console.log('🚀 Debug - Getting text from chunks: ', chunks);
     const contentChunks = chunks
       .filter(chunk => chunk.type === 'content' && chunk.data.content)
       .map(chunk => chunk.data.content);

@@ -4,6 +4,7 @@ export class SessionManager {
   private sessions = new Map<string, SessionInfo>();
 
   createSession(): SessionInfo {
+    console.log('🚀 Debug - Starting createSession');
     const sessionId = this.generateSessionId();
     const session: SessionInfo = {
       sessionId,
@@ -18,10 +19,12 @@ export class SessionManager {
   }
 
   getSession(sessionId: string): SessionInfo | undefined {
+    console.log('🚀 Debug - Starting getSession');
     return this.sessions.get(sessionId);
   }
 
   updateSession(sessionId: string, updates: Partial<SessionInfo>): void {
+    console.log('🚀 Debug - Starting updateSession');
     const session = this.sessions.get(sessionId);
     if (session) {
       Object.assign(session, updates);
@@ -29,6 +32,7 @@ export class SessionManager {
   }
 
   endSession(sessionId: string): void {
+    console.log('🚀 Debug - Starting endSession');
     const session = this.sessions.get(sessionId);
     if (session) {
       session.isActive = false;
@@ -36,15 +40,18 @@ export class SessionManager {
   }
 
   cleanupSession(sessionId: string): void {
+    console.log('🚀 Debug - Starting cleanupSession');
     this.sessions.delete(sessionId);
   }
 
   private generateSessionId(): string {
+    console.log('🚀 Debug - Starting generateSessionId');
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 }
 
 export function validateOptions(options?: ClaudeCodeAgentOptions): Required<ClaudeCodeAgentOptions> {
+  console.log('🚀 Debug - Starting validateOptions');
   const defaultOptions: Required<ClaudeCodeAgentOptions> = {
     maxTurns: 10,
     allowedTools: [],
@@ -165,6 +172,7 @@ function validateMCPServers(mcpServers?: Record<string, McpServerConfig>): Recor
 }
 
 export function formatError(error: unknown): string {
+  console.log('🚀 Debug - Starting formatError');
   if (error instanceof Error) {
     return error.message;
   }
@@ -175,6 +183,7 @@ export function formatError(error: unknown): string {
 }
 
 export function createTimeoutPromise<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  console.log('🚀 Debug - Starting createTimeoutPromise');
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
@@ -186,5 +195,6 @@ export function createTimeoutPromise<T>(promise: Promise<T>, timeoutMs: number):
 }
 
 export function sleep(ms: number): Promise<void> {
+  console.log('🚀 Debug - Starting sleep');
   return new Promise(resolve => setTimeout(resolve, ms));
 }

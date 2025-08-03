@@ -27,3 +27,6 @@ export { MessageConverter } from './message-converter.js';
 // ツールブリッジのエクスポート
 export { ToolBridge } from './tool-bridge.js';
 export type { ToolExecutionResult } from './tool-bridge.js';
+
+// Mastra configuration export
+export { mastra } from './mastra/index.js';

@@ -1,5 +1,5 @@
 {
-  "name": "@t3ta/claude-code-mastra",
+  "name": "@papaoloba/claude-code-mastra",
   "version": "0.0.1",
   "type": "module",
   "main": "dist/index.js",
@@ -24,6 +24,7 @@
     "test:ui": "vitest --ui --config config/vitest.config.ts",
     "test:coverage": "vitest run --coverage --config config/vitest.config.ts",
     "build": "tsc && mastra build",
+    "example": "npx tsx examples/example.ts",
     "typecheck": "tsc --noEmit"
   },
   "author": "Takahito Mita",

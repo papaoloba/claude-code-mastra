@@ -1,21 +1,21 @@
-# Claude Code × Mastra Agent Integration
+# Claude Code × Mastra Provider Integration
 
-This library integrates the Claude Code TypeScript SDK as an Agent within the Mastra framework.
+A TypeScript library that implements a custom Language Model Provider for the Claude Code SDK, enabling seamless integration with the Mastra AI framework through the Vercel AI SDK interface.
 
 ## Overview
 
-This library adapts the Claude Code SDK to the Mastra Agent interface, enabling powerful coding assistance features of Claude Code within the Mastra framework.
+This library provides a custom provider (`ClaudeCodeProvider`) that implements the Vercel AI SDK's `LanguageModelV1` interface, allowing you to use Claude Code SDK as a language model within Mastra agents. This approach follows the official Mastra pattern for integrating custom language models.
 
 ## Features
 
-- **Mastra Agent Compatible**: Fully implements the Mastra Framework Agent interface
-- **Custom Tools**: Supports Mastra Agent's tools feature
-- **MCP External Tools**: Integrates external tools via Model Context Protocol
-- **Streaming Support**: Real-time response processing
-- **Session Management**: Tracks session state and manages resources
-- **Error Handling**: Robust error handling mechanisms
-- **Configurable**: Supports Claude Code-specific options
-- **Type Safe**: Complete TypeScript type definitions
+- 🎯 **Provider Architecture**: Implements Vercel AI SDK's LanguageModelV1 interface for seamless integration
+- 🤖 **Claude Code Provider**: Custom language model provider that bridges Claude Code SDK with Mastra
+- 🔧 **Tool Integration**: Automatic bridging between Claude Code SDK tools and Mastra tools
+- 📨 **Message Conversion**: Seamless message format conversion between frameworks
+- 🔄 **Session Management**: Automatic session lifecycle management
+- 💰 **Cost Tracking**: Built-in usage and cost tracking
+- 🌊 **Streaming Support**: Full support for streaming responses with proper event handling
+- ⚡ **Type Safe**: Complete TypeScript type definitions
 
 ## Installation
 
@@ -25,243 +25,249 @@ npm install @anthropic-ai/claude-code @mastra/core
 
 ## Basic Usage
 
-### Simple Generation
+### Provider Setup
 
 ```typescript
-import { ClaudeCodeAgent } from './claude-code-agent.js';
+import { Agent } from '@mastra/core/agent';
+import { ClaudeCodeProvider } from '@t3ta/claude-code-mastra';
 
-const agent = new ClaudeCodeAgent({
-  maxTurns: 3,
-  permissionMode: 'default'
+// 1. Create the Claude Code provider
+const claudeCodeProvider = new ClaudeCodeProvider({
+  modelId: 'claude-code-custom',
+  claudeCodeOptions: {
+    model: 'claude-3-5-sonnet-20241022',
+    maxTurns: 10,
+    permissionMode: 'default',
+    cwd: process.cwd(),
+  }
 });
 
-const response = await agent.generate(
-  'Write a TypeScript function to calculate fibonacci numbers'
-);
+// 2. Create a Mastra agent with the provider
+const agent = new Agent({
+  model: claudeCodeProvider,
+  name: 'claude-code-agent',
+  instructions: 'You are a helpful coding assistant powered by Claude Code SDK.',
+});
 
-console.log(response.content);
-console.log(response.metadata); // Session info, cost, etc.
+// 3. Use the agent
+const result = await agent.generate('Write a TypeScript function to calculate fibonacci numbers');
+console.log(result.text);
 ```
 
-### Streaming
+### Streaming Responses
 
 ```typescript
-for await (const chunk of agent.stream('Create a REST API with Express.js')) {
-  if (chunk.type === 'content') {
-    console.log('Content:', chunk.data.content);
-  } else if (chunk.type === 'complete') {
-    console.log('Total cost:', chunk.data.totalCost);
-  }
+const messages = [
+  { role: 'user' as const, content: 'Create a REST API with Express.js' }
+];
+
+const stream = await agent.stream(messages);
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk);
 }
+
+const output = await stream.output;
+console.log('Usage:', output.usage);
+console.log('Finish Reason:', output.finishReason);
 ```
 
-## Configuration Options
+## Provider Configuration
 
 ```typescript
-interface ClaudeCodeAgentOptions {
-  maxTurns?: number;                    // Max turns (default: 10)
-  allowedTools?: string[];              // Allowed tools
-  permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
-  workingDirectory?: string;            // Working directory
-  timeout?: number;                     // Timeout (ms, default: 300000)
-}
-```
-
-## API
-
-### ClaudeCodeAgent
-
-#### constructor(options?: ClaudeCodeAgentOptions)
-Creates a new agent instance.
-
-#### generate(prompt: string, options?: Partial<ClaudeCodeAgentOptions>): Promise<MastraResponse>
-Generates a single response.
-
-#### stream(prompt: string, options?: Partial<ClaudeCodeAgentOptions>): AsyncIterable<MastraStreamChunk>
-Generates streaming responses.
-
-#### getSessionInfo(sessionId: string): SessionInfo | undefined
-Retrieves session information.
-
-#### getAllActiveSessions(): SessionInfo[]
-Retrieves all active sessions.
-
-#### updateClaudeCodeOptions(options: Partial<ClaudeCodeAgentOptions>): void
-Updates default options.
-
-## Response Format
-
-### MastraResponse
-
-```typescript
-interface MastraResponse {
-  content: string;
-  metadata?: {
-    sessionId?: string;
-    cost?: number;
-    duration?: number;
-    totalTurns?: number;
+interface ClaudeCodeProviderConfig {
+  modelId?: string;              // Custom model ID
+  claudeCodeOptions?: {          // Claude Code SDK options
+    model?: string;              // Claude model name
+    maxTurns?: number;           // Max conversation turns
+    allowedTools?: string[];     // Allowed Claude Code tools
+    disallowedTools?: string[];  // Disallowed Claude Code tools
+    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
+    cwd?: string;                // Working directory
+    timeout?: number;            // Timeout in milliseconds
+    appendSystemPrompt?: string; // Additional system prompt
+    customSystemPrompt?: string; // Override system prompt
+    maxThinkingTokens?: number;  // Max thinking tokens
+    mcpServers?: Record<string, McpServerConfig>;
   };
+  tools?: Record<string, any>;   // Provider-level tools
 }
 ```
 
-### MastraStreamChunk
+## Using with Mastra Tools
 
 ```typescript
-interface MastraStreamChunk {
-  type: 'content' | 'metadata' | 'error' | 'complete';
-  data: any;
-}
-```
-
-## Session Management
-
-The agent automatically manages sessions and provides:
-
-- **Automatic Session Creation**: Creates a new session for each query
-- **Cost Tracking**: Tracks execution cost
-- **Resource Management**: Automatic cleanup after 30 seconds
-- **Session Info**: Monitors active sessions
-
-## Error Handling
-
-```typescript
-try {
-  const response = await agent.generate('invalid request');
-} catch (error) {
-  console.error('Generation failed:', error.message);
-}
-
-// Error handling in streaming
-for await (const chunk of agent.stream('prompt')) {
-  if (chunk.type === 'error') {
-    console.error('Stream error:', chunk.data.error);
-    break;
-  }
-}
-```
-
-## Using Custom Tools
-
-### Tool Definition and Execution
-
-```typescript
-import { ClaudeCodeAgent } from './claude-code-agent.js';
 import { z } from 'zod';
-import type { ToolAction } from '@mastra/core';
 
-// Define a custom tool
-const weatherTool: ToolAction = {
-  description: 'Get weather information for a city',
-  inputSchema: z.object({
-    city: z.string(),
-    unit: z.enum(['celsius', 'fahrenheit']).optional()
-  }),
-  execute: async ({ context }) => {
-    // Actual API call, etc.
-    return {
-      city: context.city,
-      temperature: 22,
-      unit: context.unit || 'celsius',
-      conditions: 'Sunny'
-    };
-  }
-};
-
-// Create an agent with tools
-const agent = new ClaudeCodeAgent({
-  name: 'weather-agent',
-  instructions: 'You are a weather assistant with access to weather data.',
-  model: 'claude-3-5-sonnet-20241022',
+const agent = new Agent({
+  model: claudeCodeProvider,
+  name: 'assistant',
+  instructions: 'You are a helpful assistant with access to tools.',
   tools: {
-    getWeather: weatherTool
+    calculator: {
+      id: 'calculator',
+      description: 'Perform mathematical calculations',
+      inputSchema: z.object({
+        expression: z.string().describe('The mathematical expression to evaluate'),
+      }),
+      execute: async ({ context }) => {
+        // Implementation
+        const result = eval(context.expression); // Use a proper math library in production
+        return { result };
+      },
+    },
+    weatherTool: {
+      id: 'weather',
+      description: 'Get weather information',
+      inputSchema: z.object({
+        city: z.string().describe('City name'),
+      }),
+      execute: async ({ context }) => {
+        // Implementation
+        return { 
+          city: context.city,
+          temperature: 22,
+          conditions: 'Sunny'
+        };
+      },
+    },
+  },
+});
+
+const response = await agent.generate('What is 25 * 4 + 10? Also, what\'s the weather in Tokyo?');
+console.log(response.text);
+```
+
+## Advanced Features
+
+### Tool Execution Loop
+
+The provider implements an automatic tool execution loop that:
+- Detects tool calls in Claude's responses
+- Executes the corresponding Mastra tools
+- Feeds results back to Claude
+- Continues until the task is complete or max iterations reached
+
+### Session Management
+
+The provider includes built-in session management:
+
+```typescript
+const provider = new ClaudeCodeProvider({
+  modelId: 'claude-code-custom',
+});
+
+// Sessions are automatically created and managed
+// Each request gets its own session with:
+// - Unique session ID
+// - Cost tracking
+// - Duration tracking
+// - Automatic cleanup
+```
+
+### Message Conversion
+
+The provider automatically handles message format conversion between:
+- Mastra/Vercel AI SDK message format
+- Claude Code SDK message format
+- Tool execution results
+
+## Examples
+
+### Pre-built Code Assistant Agent
+
+The library includes a pre-configured Code Assistant agent that demonstrates best practices:
+
+```typescript
+import { codeAssistant } from '@t3ta/claude-code-mastra/mastra/agents/code-assistant';
+
+// Analyze code
+const result = await codeAssistant.generate([
+  {
+    role: 'user',
+    content: 'Analyze this code for improvements: ...'
   }
-});
+]);
 
-// Direct tool execution
-const weatherData = await agent.executeTool('getWeather', {
-  city: 'Tokyo',
-  unit: 'celsius'
-});
-
-// Using the agent
-const response = await agent.generate(
-  'What is the weather like in Tokyo?'
-);
-```
-
-### Dynamic Tool Management
-
-```typescript
-// Add a tool
-agent.addTool('calculator', {
-  description: 'Perform calculations',
-  inputSchema: z.object({
-    expression: z.string()
-  }),
-  execute: async ({ context }) => {
-    // Calculation logic
-    return { result: eval(context.expression) };
+// Generate tests
+const tests = await codeAssistant.generate([
+  {
+    role: 'user',
+    content: 'Generate tests for this function: ...'
   }
-});
-
-// Check available tools
-console.log(agent.getToolNames()); // ['getWeather', 'calculator']
-console.log(agent.getToolDescriptions());
-
-// Remove a tool
-agent.removeTool('calculator');
+]);
 ```
 
-## Advanced Usage
+The Code Assistant includes two custom tools:
+- **analyze-code**: Analyzes code quality and suggests improvements
+- **generate-tests**: Generates unit tests for code snippets
 
-### Dynamic Option Updates
-
-```typescript
-const agent = new ClaudeCodeAgent();
-
-// Update default options
-agent.updateClaudeCodeOptions({
-  maxTurns: 5,
-  allowedTools: ['Edit', 'Read', 'Write'],
-  permissionMode: 'bypassPermissions'
-});
-
-// Override options for a specific query
-const response = await agent.generate('prompt', {
-  maxTurns: 1,
-  timeout: 30000
-});
+Run the example:
+```bash
+npm run example:code-assistant
 ```
 
-### Session Monitoring
+## Architecture
 
-```typescript
-// Monitor active sessions
-console.log('Active sessions:', agent.getAllActiveSessions().length);
+The library follows the official Mastra pattern for custom language model integration:
 
-// Get info for a specific session
-const sessionInfo = agent.getSessionInfo(sessionId);
-if (sessionInfo) {
-  console.log('Session cost:', sessionInfo.totalCost);
-  console.log('Session duration:', Date.now() - sessionInfo.startTime);
-}
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Mastra Agent  │────▶│ ClaudeCodeProvider│────▶│ Claude Code SDK │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │
+                               ▼
+                        ┌──────────────┐
+                        │ ToolBridge   │
+                        │ MessageConv. │
+                        │ SessionMgr.  │
+                        └──────────────┘
 ```
 
-## File Structure
+### Key Components
 
-- `claude-code-agent.ts` - Main ClaudeCodeAgent class
-- `message-converter.ts` - Message conversion utilities
-- `types.ts` - TypeScript type definitions
-- `utils.ts` - Helper functions and session management
-- `example.ts` - Usage examples and demo code
+1. **ClaudeCodeProvider**: Implements `LanguageModelV1` interface
+   - `doGenerate()`: Non-streaming generation
+   - `doStream()`: Streaming generation with event handling
 
-## Requirements
+2. **ToolBridge**: Manages tool integration
+   - Generates system prompts for tools
+   - Detects tool calls in responses
+   - Executes tools and formats results
 
-- Node.js 18+
-- TypeScript 4.9+
-- `@anthropic-ai/claude-code` ^1.0.35
-- `@mastra/core` ^0.10.8
+3. **MessageConverter**: Handles message format conversion
+   - Extracts prompts from message arrays
+   - Cleans Claude Code internal formatting
+   - Converts between frameworks
+
+4. **SessionManager**: Manages session lifecycle
+   - Creates unique sessions
+   - Tracks usage and costs
+   - Handles cleanup
+
+## Testing
+
+The project includes comprehensive tests:
+
+```bash
+# Unit tests
+npm run test:unit
+
+# Integration tests
+npm run test:integration
+
+# E2E tests (requires Claude Code authentication)
+npm run test:e2e
+
+# All tests
+npm run test:all
+
+# Watch mode
+npm run test:watch
+
+# Coverage
+npm run test:coverage
+```
 
 ## Authentication
 
@@ -275,129 +281,36 @@ claude login
 export ANTHROPIC_API_KEY=your_api_key
 ```
 
-## Testing
+## Migration from Agent-based Approach
 
-This project includes a comprehensive test suite:
+If you were using the previous `ClaudeCodeAgent` class, migrate to the provider approach:
 
-### Test Types
+```typescript
+// Old approach
+import { ClaudeCodeAgent } from '@t3ta/claude-code-mastra';
+const agent = new ClaudeCodeAgent({ /* options */ });
 
-#### Unit Tests
-```bash
-npm run test:unit
-```
-Tests individual components and methods (with mocks).
+// New approach (recommended)
+import { Agent } from '@mastra/core/agent';
+import { ClaudeCodeProvider } from '@t3ta/claude-code-mastra';
 
-#### Component Integration Tests
-```bash
-npm run test:integration
-```
-Tests integration between components (with mocks).
-
-#### E2E Tests
-```bash
-npm run test:e2e
-```
-Tests integration with the actual Claude Code SDK (real API calls).
-
-⚠️ **Note**: E2E tests require:
-- Claude Code CLI setup: `claude login`
-- Valid Anthropic API key
-- Internet connection
-- Possible API credit consumption
-
-#### All Tests
-```bash
-npm run test        # All tests except E2E
-npm run test:all    # Run all tests
-npm run test:watch  # Watch mode
-npm run test:ui     # UI test runner
-npm run test:coverage # With coverage
+const provider = new ClaudeCodeProvider({ /* options */ });
+const agent = new Agent({ model: provider, /* other options */ });
 ```
 
-### Test Results
+## Security Considerations
 
-- **73 unit/integration tests**
-- **9 E2E tests**
-- **Full coverage**: All major features covered
-- **Performance tests**: Response time and concurrency
-- **Error handling tests**: Abnormal case verification
+⚠️ **Important**: Claude Code SDK tool restrictions (`allowedTools`/`disallowedTools`) may not work as expected. Be cautious with:
 
-## Development
+- File system operations (Read, Write, Edit)
+- Command execution (Bash)
+- Resource consumption
 
-```bash
-# Type checking during development
-npm run typecheck
-
-# Build
-npm run build
-
-# Test in watch mode
-npm run test:watch
-```
-
-## Security and Limitations
-
-### Current Limitations
-
-Currently, the built-in tool restriction features (`allowedTools`/`disallowedTools`) of the Claude Code SDK may not work as expected. Please note the following security risks:
-
-#### **High Risk**
-
-1. **Unintended File Operations**
-   ```typescript
-   // If Write, Edit, Bash tools are not restricted
-   agent.generate("Delete important files");
-   // → May actually perform file operations
-   ```
-
-2. **Arbitrary Command Execution**
-   ```typescript
-   // Arbitrary system command execution via Bash tool
-   agent.generate("npm install malicious-package");
-   // → May change the system
-   ```
-
-3. **System Resource Abuse**
-   ```typescript
-   // Unlimited file reading
-   agent.generate("Read all files");
-   // → Heavy I/O load
-   ```
-
-#### **Recommended Countermeasures**
-
-1. **Careful control in production**
-   - Only process trusted input
-   - Run in a sandbox environment without important files
-   - Set appropriate permissions
-
-2. **Prefer Mastra tools**
-   ```typescript
-   // Define and use safe custom tools
-   const agent = new ClaudeCodeAgent({
-     tools: {
-       safeTool: {
-         description: 'Performs only safe operations',
-         // Controlled implementation
-       }
-     }
-   });
-   ```
-
-3. **Session Monitoring**
-   ```typescript
-   // Monitor session info and control cost
-   const sessions = agent.getAllActiveSessions();
-   sessions.forEach(session => {
-     if (session.totalCost > threshold) {
-       agent.stopSession(session.sessionId);
-     }
-   });
-   ```
-
-### Planned Fixes
-
-Tool restriction features will be fixed in future updates. Currently, the core features (tool execution, result return, session management) work as intended.
+**Recommendations**:
+- Use Mastra tools instead of Claude Code built-in tools
+- Run in sandboxed environments
+- Validate all inputs
+- Monitor session costs and usage
 
 ## License
 

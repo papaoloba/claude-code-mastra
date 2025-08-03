@@ -108,9 +108,7 @@ describe('MessageConverter', () => {
         Date.now()
       );
 
-      expect(result.content).toContain('Text content');
-      expect(result.content).toContain('[Tool: TestTool]');
-      expect(result.content).toContain('[Tool Result: Tool executed]');
+      expect(result.content).toBe('Text content\nTool executed');
     });
 
     it('should use result message when no assistant messages', () => {

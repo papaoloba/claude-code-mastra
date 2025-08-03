@@ -290,7 +290,8 @@ describe('ClaudeCodeAgent - Mastra Agent Tools', () => {
       
       // システムプロンプトにツール情報が含まれることを確認
       const callArgs = mockQuery.mock.calls[0][0];
-      expect(callArgs.options.appendSystemPrompt).toContain('## Available Tools');
+      expect(callArgs.options.appendSystemPrompt).toContain('## IMPORTANT: You MUST use these external tools');
+      expect(callArgs.options.appendSystemPrompt).toContain('Available tools:');
       expect(callArgs.options.appendSystemPrompt).toContain('searchTool: Search for information');
     });
   });

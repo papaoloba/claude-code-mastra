@@ -1,68 +1,14 @@
-import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-code';
+import { query } from '@anthropic-ai/claude-code';
 import { Agent } from '@mastra/core';
-import type { ToolAction } from '@mastra/core';
-// import { MastraAgentStream } from '@mastra/core/stream/MastraAgentStream';
 import { z } from 'zod';
-import type { 
-  CoreMessage
-} from 'ai';
-import type {
-  ClaudeCodeAgentOptions,
-  MastraStreamChunk,
-  SessionInfo,
-  ToolsInput
-} from './types.js';
-import type { 
-  GenerateTextResult,
-  GenerateObjectResult,
-  StreamTextResult,
-  StreamObjectResult
-} from '@mastra/core';
-import type { ZodSchema } from 'zod';
-import type { JSONSchema7 } from 'json-schema';
-
-// Define agent option types locally to avoid import issues
-type AgentGenerateOptions<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  instructions?: string;
-  maxSteps?: number;
-  output?: OUTPUT;
-  experimental_output?: EXPERIMENTAL_OUTPUT;
-  [key: string]: any;
-};
-
-type AgentStreamOptions<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined> = {
-  instructions?: string;
-  maxSteps?: number;
-  output?: OUTPUT;
-  experimental_output?: EXPERIMENTAL_OUTPUT;
-  [key: string]: any;
-};
-
-type AiMessageType = {
-  role: string;
-  content: string;
-  [key: string]: any;
-};
-
-type UIMessageWithMetadata = {
-  role: string;
-  content: string;
-  metadata?: any;
-  [key: string]: any;
-};
 import { MessageConverter } from './message-converter.js';
 import { SessionManager, validateOptions, formatError } from './utils.js';
 import { ToolBridge } from './tool-bridge.js';
 
 export class ClaudeCodeAgent extends Agent {
   // Mastraの基底クラスのメソッドシグネチャと互換性を保つため、anyでオーバーライド
-  private sessionManager: SessionManager;
-  private messageConverter: MessageConverter;
-  private claudeOptions: Required<ClaudeCodeAgentOptions>;
-  private _tools: ToolsInput;
-  private toolBridge: ToolBridge;
 
-  constructor(config: any & { claudeCodeOptions?: ClaudeCodeAgentOptions; tools?: ToolsInput }) {
+  constructor(config) {
     super(config);
     this.sessionManager = new SessionManager();
     this.messageConverter = new MessageConverter();
@@ -72,20 +18,13 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   // Override generate method with proper Mastra signature
-  public override async generate<
-    Tools extends ToolSet,
-    Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-    ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    optionsOrMessages: AgentGenerateOptions<Output, ExperimentalOutput> | any,
-    legacyOptions?: any
-  ): Promise<GenerateReturn<Tools, Output, ExperimentalOutput>> {
+  async generate(optionsOrMessages, legacyOptions) {
 
     console.log('🚀 Debug - Starting generate with params:', typeof optionsOrMessages, !!legacyOptions);
 
     // Handle both calling conventions for compatibility
-    let options: AgentGenerateOptions<Output, ExperimentalOutput>;
-    let messages: any[];
+    let options;
+    let messages;
     
     if (typeof optionsOrMessages === 'object' && !Array.isArray(optionsOrMessages) && 'messages' in optionsOrMessages) {
       // Standard Mastra style: generate(options)
@@ -107,8 +46,11 @@ export class ClaudeCodeAgent extends Agent {
     console.log('🚀 Debug - Clearing tool history');
     this.toolBridge.clearHistory();
     
-    // オプションをマージ
-    const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(options) };
+    // オプションをマージ - claudeOptionsは既にRequired<ClaudeCodeAgentOptions>型
+    const mergedOptions = { 
+      ...this.claudeOptions, 
+      ...this.extractClaudeOptionsFromArgs(options) 
+    };
     console.log('🚀 Debug - Merged options:', mergedOptions);
 
     // Mastraツールがある場合は、Claude Code内蔵ツールを無効化し、Mastraツールのみを使用
@@ -127,7 +69,7 @@ export class ClaudeCodeAgent extends Agent {
     try {
       const claudeOptions = this.createClaudeCodeOptions(mergedOptions);
       console.log('🚀 Debug - Created Claude options:', claudeOptions);
-      const sdkMessages: SDKMessage[] = [];
+      const sdkMessages = [];
       const startTime = Date.now();
 
       // ツール実行ループ
@@ -141,7 +83,7 @@ export class ClaudeCodeAgent extends Agent {
       while (iterationCount < maxIterations) {
         console.log(`🔄 Debug - Iteration ${iterationCount + 1}/${maxIterations}`);
 
-        const iterationMessages: SDKMessage[] = [];
+        const iterationMessages = [];
         console.log('🚀 Debug - Collecting messages: ', currentPrompt);
         await this.collectMessages(currentPrompt, claudeOptions, iterationMessages);
         console.log('📨 Debug - Received messages count:', iterationMessages.length);
@@ -198,8 +140,8 @@ export class ClaudeCodeAgent extends Agent {
 
       // ツール実行履歴から toolCalls と toolResults を生成
       const toolHistory = this.toolBridge.getExecutionHistory();
-      const toolCalls: any[] = [];
-      const toolResults: any[] = [];
+      const toolCalls = [];
+      const toolResults = [];
 
       toolHistory.forEach(execution => {
         const toolCallId = `call_${execution.timestamp}`;
@@ -229,9 +171,9 @@ export class ClaudeCodeAgent extends Agent {
       
       if (hasOutput) {
         // Return GenerateObjectResult for structured output
-        const objectResponse: GenerateObjectResult<any> = {
+        const objectResponse = {
           object: {}, // This would need to be parsed from the actual response
-          finishReason: 'stop' as const,
+          finishReason: 'stop',
           usage: {
             totalTokens: 0,
             promptTokens: 0,
@@ -245,25 +187,25 @@ export class ClaudeCodeAgent extends Agent {
               cost: mastraResponse.metadata?.cost || 0,
               duration: mastraResponse.metadata?.duration || 0
             }
-          } as any,
+          },
           experimental_providerMetadata: {
             claudeCode: {
               sessionId: mastraResponse.metadata?.sessionId || '',
               cost: mastraResponse.metadata?.cost || 0,
               duration: mastraResponse.metadata?.duration || 0
             }
-          } as any,
+          },
           request: {
             body: JSON.stringify({ messages, ...options })
-          } as any,
+          },
           response: {
             id: session.sessionId,
             timestamp: new Date(),
             modelId: mergedOptions.model || 'claude-3-5-sonnet-20241022'
-          } as any,
+          },
           toJsonResponse: () => new Response(JSON.stringify({
             object: {},
-            finishReason: 'stop' as const,
+            finishReason: 'stop',
             usage: { totalTokens: 0, promptTokens: 0, completionTokens: 0 }
           }), { 
             status: 200,
@@ -274,18 +216,18 @@ export class ClaudeCodeAgent extends Agent {
       }
       
       // Create the assistant response message
-      const responseMessage: CoreMessage = {
+      const responseMessage = {
         role: 'assistant',
         content: mastraResponse.content || ''
       };
 
       // Create a response that matches GenerateTextResult interface
-      const response: GenerateTextResult<any, any> = {
+      const response = {
         // Core properties
         text: mastraResponse.content || '',
         toolCalls: toolCalls,
         toolResults: toolResults,
-        finishReason: 'stop' as const,
+        finishReason: 'stop',
         usage: {
           totalTokens: 0,
           promptTokens: 0,
@@ -295,13 +237,13 @@ export class ClaudeCodeAgent extends Agent {
         steps: [],
         request: {
           body: JSON.stringify({ messages, ...options })
-        } as any,
+        },
         response: {
           id: session.sessionId,
           timestamp: new Date(),
           modelId: mergedOptions.model || 'claude-3-5-sonnet-20241022',
           messages: [responseMessage]  // Add messages array like in dummy agent
-        } as any,
+        },
         logprobs: undefined,
         providerMetadata: {
           claudeCode: {
@@ -309,7 +251,7 @@ export class ClaudeCodeAgent extends Agent {
             cost: mastraResponse.metadata?.cost || 0,
             duration: mastraResponse.metadata?.duration || 0
           }
-        } as any,
+        },
         warnings: undefined,
         // Optional properties - only include object if experimental output is requested
         ...(hasExperimentalOutput && { object: {} }),
@@ -318,7 +260,7 @@ export class ClaudeCodeAgent extends Agent {
         reasoningDetails: [],
         sources: [],
         runId: options.runId || session.sessionId  // Add runId like in dummy agent
-      } as any;
+      };
 
       console.log('🚀 Debug - Final response text:', response.text);
       console.log('🚀 Debug - Response type check:', 'text' in response, 'finishReason' in response);
@@ -342,52 +284,39 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   // Stream method overloads to match Mastra Agent interface
-  async stream<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined, EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
-    args?: AgentStreamOptions<OUTPUT, EXPERIMENTAL_OUTPUT> & {
-      output?: never;
-      experimental_output?: never;
+  async stream(messagesOrOptions, args) {
+
+    // Handle overloaded signatures
+    let messages;
+    let options;
+    
+    if (typeof messagesOrOptions === 'string' || Array.isArray(messagesOrOptions)) {
+      // First overload: stream(messages, args?)
+      messages = this.convertToMessages(messagesOrOptions);
+      options = args || {};
+    } else if (messagesOrOptions && 'messages' in messagesOrOptions) {
+      // Direct options object
+      messages = this.convertToMessages(messagesOrOptions.messages || []);
+      options = messagesOrOptions;
+    } else {
+      // Legacy format with messages as part of the argument
+      messages = [];
+      options = messagesOrOptions;
     }
-  ): Promise<StreamTextResult<any, OUTPUT extends ZodSchema ? any : unknown>>;
-  
-  async stream<OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
-    args?: AgentStreamOptions<OUTPUT, undefined> & {
-      output?: OUTPUT;
-      experimental_output?: never;
-    }
-  ): Promise<StreamObjectResult<any>>;
-  
-  async stream<EXPERIMENTAL_OUTPUT extends ZodSchema | JSONSchema7 | undefined = undefined>(
-    messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[],
-    args?: AgentStreamOptions<undefined, EXPERIMENTAL_OUTPUT> & {
-      output?: never;
-      experimental_output?: EXPERIMENTAL_OUTPUT;
-    }
-  ): Promise<StreamTextResult<any, EXPERIMENTAL_OUTPUT extends ZodSchema ? any : unknown> & {
-    partialObjectStream: any;
-  }>;
-  
-  // Override stream method with proper Mastra signature  
-  public override async stream<
-    Tools extends ToolSet,
-    Output extends ZodSchema | JSONSchema7 | undefined = undefined,
-    ExperimentalOutput extends ZodSchema | JSONSchema7 | undefined = undefined,
-  >(
-    options: AgentStreamOptions<Output, ExperimentalOutput>,
-  ): Promise<MastraAgentStream<Tools, Output, ExperimentalOutput>> {
 
     console.log('🚀 Debug - Starting stream with options:', Object.keys(options));
 
     const session = this.sessionManager.createSession();
-    const messages = options.messages || [];
     const prompt = this.extractPromptFromMessages(messages);
     
     // ツール履歴をクリア
     this.toolBridge.clearHistory();
     
-    // オプションをマージ
-    const mergedOptions = { ...this.claudeOptions, ...this.extractClaudeOptionsFromArgs(options) };
+    // オプションをマージ - claudeOptionsは既にRequired<ClaudeCodeAgentOptions>型
+    const mergedOptions = { 
+      ...this.claudeOptions, 
+      ...this.extractClaudeOptionsFromArgs(options) 
+    };
     
     // Mastraツールがある場合は、Claude Code内蔵ツールを無効化し、Mastraツールのみを使用
     const toolsSystemPrompt = this.toolBridge.generateSystemPrompt();
@@ -400,7 +329,7 @@ export class ClaudeCodeAgent extends Agent {
         : toolsSystemPrompt;
     }
     
-    const chunks: MastraStreamChunk[] = [];
+    const chunks = [];
     
     try {
       const claudeOptions = this.createClaudeCodeOptions(mergedOptions);
@@ -416,7 +345,7 @@ export class ClaudeCodeAgent extends Agent {
       const maxIterations = 5;
 
       while (iterationCount < maxIterations) {
-        const iterationMessages: SDKMessage[] = [];
+        const iterationMessages = [];
         const queryIterator = query({ prompt: currentPrompt, options: claudeOptions });
 
         for await (const message of queryIterator) {
@@ -467,8 +396,8 @@ export class ClaudeCodeAgent extends Agent {
 
     // ツール実行履歴から toolCalls と toolResults を生成
     const toolHistory = this.toolBridge.getExecutionHistory();
-    const toolCalls: any[] = [];
-    const toolResults: any[] = [];
+    const toolCalls = [];
+    const toolResults = [];
 
     toolHistory.forEach(execution => {
       const toolCallId = `call_${execution.timestamp}`;
@@ -495,7 +424,7 @@ export class ClaudeCodeAgent extends Agent {
     // Return a simple stream result for now
     // TODO: Replace with MastraAgentStream when import is resolved
     return {
-      textStream: this.createAsyncIterable(chunks) as any,
+      textStream: this.createAsyncIterable(chunks),
       text: this.getTextFromChunks(chunks),
       toolCalls: Promise.resolve(toolCalls.length > 0 ? toolCalls : []),
       toolResults: Promise.resolve(toolResults.length > 0 ? toolResults : []),
@@ -504,18 +433,14 @@ export class ClaudeCodeAgent extends Agent {
         completionTokens: 0,
         totalTokens: 0
       }),
-      finishReason: Promise.resolve('stop' as const),
+      finishReason: Promise.resolve('stop'),
       experimental_providerMetadata: Promise.resolve({ 
         sessionId: session.sessionId
       })
-    } as any;
+    };
   }
 
-  private async collectMessages(
-    prompt: string,
-    claudeOptions: Options,
-    messages: SDKMessage[]
-  ): Promise<void> {
+  async collectMessages(prompt, claudeOptions, messages) {
     console.log('🚀 Debug - starting collectMessages');
 
     for await (const message of query({ prompt, options: claudeOptions })) {
@@ -524,8 +449,8 @@ export class ClaudeCodeAgent extends Agent {
     }
   }
 
-  private createClaudeCodeOptions(options: Required<ClaudeCodeAgentOptions>): Options {
-    const claudeOptions: Options = {
+  createClaudeCodeOptions(options) {
+    const claudeOptions = {
       maxTurns: options.maxTurns,
       cwd: options.cwd
     };
@@ -569,7 +494,7 @@ export class ClaudeCodeAgent extends Agent {
     return claudeOptions;
   }
 
-  private updateSessionFromMessage(sessionId: string, message: SDKMessage): void {
+  updateSessionFromMessage(sessionId, message) {
     const session = this.sessionManager.getSession(sessionId);
     if (!session) return;
 
@@ -587,12 +512,12 @@ export class ClaudeCodeAgent extends Agent {
     }
   }
 
-  getSessionInfo(sessionId: string): SessionInfo | undefined {
+  getSessionInfo(sessionId) {
     return this.sessionManager.getSession(sessionId);
   }
 
-  getAllActiveSessions(): SessionInfo[] {
-    const sessions: SessionInfo[] = [];
+  getAllActiveSessions() {
+    const sessions = [];
     for (const session of this.sessionManager['sessions'].values()) {
       if (session.isActive) {
         sessions.push(session);
@@ -601,43 +526,43 @@ export class ClaudeCodeAgent extends Agent {
     return sessions;
   }
 
-  async stopSession(sessionId: string): Promise<void> {
+  async stopSession(sessionId) {
     console.log('🚀 Debug - Stopping session: ', sessionId);
     this.sessionManager.endSession(sessionId);
   }
 
   // Claude Code固有のメソッド
-  updateClaudeCodeOptions(options: Partial<ClaudeCodeAgentOptions>): void {
+  updateClaudeCodeOptions(options) {
     console.log('🚀 Debug - Updating Claude Code options: ', options);
     this.claudeOptions = validateOptions({ ...this.claudeOptions, ...options });
   }
 
-  getClaudeCodeOptions(): Required<ClaudeCodeAgentOptions> {
+  getClaudeCodeOptions() {
     console.log('🚀 Debug - Getting Claude Code options: ', this.claudeOptions);
     return { ...this.claudeOptions };
   }
 
   // Mastra Agent Tools メソッド
-  getTools(): ToolsInput {
+  getTools() {
     console.log('🚀 Debug - Getting tools: ', this._tools);
     return { ...this._tools };
   }
 
-  getToolNames(): string[] {
+  getToolNames() {
     console.log('🚀 Debug - Getting tool names: ', Object.keys(this._tools));
     return Object.keys(this._tools);
   }
 
-  getToolDescriptions(): Record<string, string> {
+  getToolDescriptions() {
     console.log('🚀 Debug - Getting tool descriptions: ', Object.entries(this._tools));
-    const descriptions: Record<string, string> = {};
+    const descriptions = {};
     for (const [name, tool] of Object.entries(this._tools)) {
       descriptions[name] = tool.description;
     }
     return descriptions;
   }
 
-  async executeTool(toolName: string, input: any): Promise<any> {
+  async executeTool(toolName, input) {
     console.log('🚀 Debug - Executing tool: ', toolName, input);
     const tool = this._tools[toolName];
     if (!tool) {
@@ -668,23 +593,23 @@ export class ClaudeCodeAgent extends Agent {
     });
   }
 
-  addTool(name: string, tool: ToolAction<any, any, any>): void {
+  addTool(name, tool) {
     console.log('🚀 Debug - Adding tool: ', name, tool);
     this._tools[name] = tool;
   }
 
-  removeTool(name: string): void {
+  removeTool(name) {
     console.log('🚀 Debug - Removing tool: ', name);
     delete this._tools[name];
   }
 
-  private getLastAssistantContent(messages: SDKMessage[]): string | null {
+  getLastAssistantContent(messages) {
     console.log('🚀 Debug - Getting last assistant content: ', messages);
     // 最後のアシスタントメッセージの内容を取得
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message && message.type === 'assistant') {
-        let content: string | undefined;
+        let content;
         
         // 直接contentフィールドがある場合
         if ('content' in message && typeof message.content === 'string') {
@@ -692,15 +617,15 @@ export class ClaudeCodeAgent extends Agent {
         } 
         // message.message.contentの構造の場合
         else if ('message' in message && message.message && typeof message.message === 'object') {
-          const innerMessage = message.message as any;
+          const innerMessage = message.message;
           if ('content' in innerMessage && typeof innerMessage.content === 'string') {
             content = innerMessage.content;
           }
           // content配列の場合
           else if (Array.isArray(innerMessage.content)) {
             content = innerMessage.content
-              .filter((block: any) => block.type === 'text')
-              .map((block: any) => block.text)
+              .filter((block) => block.type === 'text')
+              .map((block) => block.text)
               .join(' ');
           }
         }
@@ -713,16 +638,31 @@ export class ClaudeCodeAgent extends Agent {
   }
 
   // ヘルパーメソッド
-  private extractPromptFromMessages(messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[]): string {
+  convertToMessages(input) {
+    if (typeof input === 'string') {
+      return [{ role: 'user', content: input }];
+    }
+    if (Array.isArray(input)) {
+      if (input.length === 0) return [];
+      if (typeof input[0] === 'string') {
+        return input.map(content => ({ role: 'user', content }));
+      }
+      // Already CoreMessage[] or similar
+      return input;
+    }
+    return [];
+  }
+
+  extractPromptFromMessages(messages) {
     console.log('🚀 Debug - Extracting prompt from messages: ', messages);
     if (typeof messages === 'string') {
       return messages;
     }
     if (Array.isArray(messages)) {
       if (typeof messages[0] === 'string') {
-        return (messages as string[]).join('\n');
+        return messages.join('\n');
       }
-      return (messages as any[])
+      return messages
         .map(msg => typeof msg.content === 'string' ? msg.content : '')
         .filter(Boolean)
         .join('\n');
@@ -730,17 +670,23 @@ export class ClaudeCodeAgent extends Agent {
     return '';
   }
 
-  private extractClaudeOptionsFromArgs(args?: any): Partial<ClaudeCodeAgentOptions> {
+  extractClaudeOptionsFromArgs(args) {
     console.log('🚀 Debug - Extracting Claude Code options from args: ', args);
     if (!args) return {};
     
-    return {
-      maxTurns: args.maxSteps,
-      // argsから他のClaudeCode関連オプションがあれば変換
-    };
+    const result = {};
+    
+    // Only set properties if they exist in args
+    if (args.maxSteps !== undefined) {
+      result.maxTurns = args.maxSteps;
+    }
+    
+    // argsから他のClaudeCode関連オプションがあれば変換
+    
+    return result;
   }
 
-  private async *createAsyncIterable(chunks: MastraStreamChunk[]): AsyncIterable<string> {
+  async *createAsyncIterable(chunks) {
     console.log('🚀 Debug - Creating async iterable: ', chunks);
     for (const chunk of chunks) {
       if (chunk.type === 'content' && chunk.data.content) {
@@ -749,7 +695,7 @@ export class ClaudeCodeAgent extends Agent {
     }
   }
 
-  private getTextFromChunks(chunks: MastraStreamChunk[]): Promise<string> {
+  getTextFromChunks(chunks) {
     console.log('🚀 Debug - Getting text from chunks: ', chunks);
     const contentChunks = chunks
       .filter(chunk => chunk.type === 'content' && chunk.data.content)

@@ -1,5 +1,4 @@
 import type { ToolAction } from '@mastra/core';
-import type { SDKMessage } from '@anthropic-ai/claude-code';
 
 /**
  * Mastraツールの実行結果を表すインターフェース

@@ -1,10 +1,5 @@
-// Provider export (新しいアプローチ)
 export { ClaudeCodeProvider } from './claude-code-provider.js';
 
-// 既存のエージェントエクスポート（後方互換性のため）
-export { ClaudeCodeAgent } from './claude-code-agent.js';
-
-// 型定義のエクスポート
 export type {
   ClaudeCodeAgentOptions,
   MastraResponse,
@@ -18,18 +13,13 @@ export type {
   ToolsInput
 } from './types.js';
 
-// Mastra Coreの型を再エクスポート（便利のため）
 export type { ToolAction } from '@mastra/core';
 
-// ユーティリティのエクスポート
 export { SessionManager, formatError, validateOptions } from './utils.js';
 
-// メッセージコンバーターのエクスポート
 export { MessageConverter } from './message-converter.js';
 
-// ツールブリッジのエクスポート
 export { ToolBridge } from './tool-bridge.js';
 export type { ToolExecutionResult } from './tool-bridge.js';
 
-// Mastra configuration export
 export { mastra } from './mastra/index.js';

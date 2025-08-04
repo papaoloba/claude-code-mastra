@@ -7,6 +7,27 @@ import type { SDKMessage } from '@anthropic-ai/claude-code';
 
 export class MessageConverter {
   /**
+   * Extract prompt from messages array (for provider compatibility)
+   */
+  extractPromptFromMessages(messages: any[] = []): string {
+    return messages
+      .map(msg => {
+        if (typeof msg.content === 'string') {
+          return msg.content;
+        }
+        if (Array.isArray(msg.content)) {
+          return msg.content
+            .filter((part: any) => part.type === 'text')
+            .map((part: any) => part.text || '')
+            .join('');
+        }
+        return '';
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  /**
    * Claude Code SDKの内部表示（[tool: xxx]など）をクリーンアップ
    */
   private cleanClaudeCodeInternalText(text: string): string {

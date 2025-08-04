@@ -1,4 +1,7 @@
-// メインエクスポート
+// Provider export (新しいアプローチ)
+export { ClaudeCodeProvider } from './claude-code-provider.js';
+
+// 既存のエージェントエクスポート（後方互換性のため）
 export { ClaudeCodeAgent } from './claude-code-agent.js';
 
 // 型定義のエクスポート

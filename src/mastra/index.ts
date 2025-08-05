@@ -2,11 +2,19 @@
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { LibSQLStore } from '@mastra/libsql';
-import { codeAssistant } from './agents/code-assistant';
+import { csvQuestionAgent } from './agents/csv-question-agent';
+import { csvSummarizationAgent } from './agents/csv-summarization-agent';
+import { textQuestionAgent } from './agents/text-question-agent';
+import { csvToQuestionsWorkflow } from './workflows/csv-to-questions-workflow';
 
 export const mastra = new Mastra({
   agents: { 
-    codeAssistant 
+    csvQuestionAgent,
+    csvSummarizationAgent,
+    textQuestionAgent,
+  },
+  workflows: {
+    csvToQuestionsWorkflow,
   },
   storage: new LibSQLStore({
     // stores telemetry, evals, ... into memory storage, if it needs to persist, change to file:../mastra.db

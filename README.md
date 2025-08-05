@@ -1,263 +1,258 @@
-# Claude Code × Mastra Provider Integration
+# Claude Code × Mastra Integration
 
-A TypeScript library that implements a custom Language Model Provider for the Claude Code SDK, enabling seamless integration with the Mastra AI framework through the Vercel AI SDK interface.
+A powerful TypeScript library that bridges Claude Code SDK with the Mastra framework, enabling seamless AI agent development with Claude's advanced capabilities.
 
-## Overview
+## 🌟 Features
 
-This library provides a custom provider (`ClaudeCodeProvider`) that implements the Vercel AI SDK's `LanguageModelV1` interface, allowing you to use Claude Code SDK as a language model within Mastra agents. This approach follows the official Mastra pattern for integrating custom language models.
+- **Vercel AI SDK Compatible**: Implements LanguageModelV1 interface for drop-in compatibility
+- **Intelligent Tool Bridge**: Automatic conflict resolution between Claude Code and Mastra tools
+- **Streaming Support**: Full streaming capabilities with tool execution
+- **Session Management**: Automatic session lifecycle with cost and duration tracking
+- **Type Safety**: Complete TypeScript support with comprehensive type definitions
+- **MCP Server Support**: Configure Model Context Protocol servers for extended capabilities
 
-## Features
-
-- 🎯 **Provider Architecture**: Implements Vercel AI SDK's LanguageModelV1 interface for seamless integration
-- 🤖 **Claude Code Provider**: Custom language model provider that bridges Claude Code SDK with Mastra
-- 🔧 **Tool Integration**: Automatic bridging between Claude Code SDK tools and Mastra tools
-- 📨 **Message Conversion**: Seamless message format conversion between frameworks
-- 🔄 **Session Management**: Automatic session lifecycle management
-- 💰 **Cost Tracking**: Built-in usage and cost tracking
-- 🌊 **Streaming Support**: Full support for streaming responses with proper event handling
-- ⚡ **Type Safe**: Complete TypeScript type definitions
-
-## Installation
+## 📦 Installation
 
 ```bash
-npm install @anthropic-ai/claude-code @mastra/core
+npm install @papaoloba/claude-code-mastra
 ```
 
-## Basic Usage
+## 🚀 Quick Start
 
-### Provider Setup
+### Basic Usage with ClaudeCodeProvider
 
 ```typescript
-import { Agent } from '@mastra/core/agent';
-import { ClaudeCodeProvider } from '@t3ta/claude-code-mastra';
+import { ClaudeCodeProvider } from '@papaoloba/claude-code-mastra';
+import { generateText } from 'ai';
 
-// 1. Create the Claude Code provider
-const claudeCodeProvider = new ClaudeCodeProvider({
-  modelId: 'claude-code-custom',
+// Create a provider instance
+const provider = new ClaudeCodeProvider({
+  modelId: 'claude-code-assistant',
   claudeCodeOptions: {
     model: 'claude-3-5-sonnet-20241022',
     maxTurns: 10,
-    permissionMode: 'default',
-    cwd: process.cwd(),
+    permissionMode: 'default'
   }
 });
 
-// 2. Create a Mastra agent with the provider
-const agent = new Agent({
-  model: claudeCodeProvider,
-  name: 'claude-code-agent',
-  instructions: 'You are a helpful coding assistant powered by Claude Code SDK.',
+// Use with Vercel AI SDK
+const result = await generateText({
+  model: provider,
+  prompt: 'Write a function to calculate fibonacci numbers'
 });
 
-// 3. Use the agent
-const result = await agent.generate('Write a TypeScript function to calculate fibonacci numbers');
 console.log(result.text);
+```
+
+### Using with Mastra Agents
+
+```typescript
+import { Agent } from '@mastra/core/agent';
+import { ClaudeCodeProvider } from '@papaoloba/claude-code-mastra';
+
+const codeAssistant = new Agent({
+  name: 'Code Assistant',
+  description: 'AI assistant powered by Claude Code',
+  model: new ClaudeCodeProvider({
+    claudeCodeOptions: {
+      model: 'claude-3-5-sonnet-20241022',
+      maxTurns: 5
+    }
+  }),
+  tools: {
+    // Your Mastra tools here
+  }
+});
+
+// Execute the agent
+const response = await codeAssistant.generate('Help me refactor this code...');
 ```
 
 ### Streaming Responses
 
 ```typescript
-const messages = [
-  { role: 'user' as const, content: 'Create a REST API with Express.js' }
-];
+import { streamText } from 'ai';
 
-const stream = await agent.stream(messages);
+const stream = await streamText({
+  model: provider,
+  prompt: 'Explain async/await in JavaScript'
+});
 
 for await (const chunk of stream.textStream) {
   process.stdout.write(chunk);
 }
-
-const output = await stream.output;
-console.log('Usage:', output.usage);
-console.log('Finish Reason:', output.finishReason);
 ```
 
-## Provider Configuration
+## 🛠️ Advanced Configuration
+
+### Custom Tools Integration
 
 ```typescript
-interface ClaudeCodeProviderConfig {
-  modelId?: string;              // Custom model ID
-  claudeCodeOptions?: {          // Claude Code SDK options
-    model?: string;              // Claude model name
-    maxTurns?: number;           // Max conversation turns
-    allowedTools?: string[];     // Allowed Claude Code tools
-    disallowedTools?: string[];  // Disallowed Claude Code tools
-    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions';
-    cwd?: string;                // Working directory
-    timeout?: number;            // Timeout in milliseconds
-    appendSystemPrompt?: string; // Additional system prompt
-    customSystemPrompt?: string; // Override system prompt
-    maxThinkingTokens?: number;  // Max thinking tokens
-    mcpServers?: Record<string, McpServerConfig>;
-  };
-  tools?: Record<string, any>;   // Provider-level tools
-}
-```
+import { ClaudeCodeProvider } from '@papaoloba/claude-code-mastra';
+import { createTool } from '@mastra/core';
 
-## Using with Mastra Tools
-
-```typescript
-import { z } from 'zod';
-
-const agent = new Agent({
-  model: claudeCodeProvider,
-  name: 'assistant',
-  instructions: 'You are a helpful assistant with access to tools.',
-  tools: {
-    calculator: {
-      id: 'calculator',
-      description: 'Perform mathematical calculations',
-      inputSchema: z.object({
-        expression: z.string().describe('The mathematical expression to evaluate'),
-      }),
-      execute: async ({ context }) => {
-        // Implementation
-        const result = eval(context.expression); // Use a proper math library in production
-        return { result };
-      },
-    },
-    weatherTool: {
-      id: 'weather',
-      description: 'Get weather information',
-      inputSchema: z.object({
-        city: z.string().describe('City name'),
-      }),
-      execute: async ({ context }) => {
-        // Implementation
-        return { 
-          city: context.city,
-          temperature: 22,
-          conditions: 'Sunny'
-        };
-      },
-    },
-  },
+// Define custom tools
+const calculatorTool = createTool({
+  name: 'calculator',
+  description: 'Performs mathematical calculations',
+  inputSchema: z.object({
+    expression: z.string()
+  }),
+  execute: async ({ context }) => {
+    return eval(context.expression); // Note: Use a proper math parser in production
+  }
 });
 
-const response = await agent.generate('What is 25 * 4 + 10? Also, what\'s the weather in Tokyo?');
-console.log(response.text);
+// Create provider with tools
+const provider = new ClaudeCodeProvider({
+  tools: {
+    calculator: calculatorTool
+  }
+});
 ```
 
-## Advanced Features
-
-### Tool Execution Loop
-
-The provider implements an automatic tool execution loop that:
-- Detects tool calls in Claude's responses
-- Executes the corresponding Mastra tools
-- Feeds results back to Claude
-- Continues until the task is complete or max iterations reached
-
-### Session Management
-
-The provider includes built-in session management:
+### MCP Server Configuration
 
 ```typescript
 const provider = new ClaudeCodeProvider({
-  modelId: 'claude-code-custom',
+  claudeCodeOptions: {
+    mcpServers: {
+      myServer: {
+        type: 'stdio',
+        command: 'node',
+        args: ['./mcp-server.js'],
+        env: { API_KEY: process.env.MCP_API_KEY }
+      }
+    }
+  }
 });
-
-// Sessions are automatically created and managed
-// Each request gets its own session with:
-// - Unique session ID
-// - Cost tracking
-// - Duration tracking
-// - Automatic cleanup
 ```
 
-### Message Conversion
+## 📚 API Reference
 
-The provider automatically handles message format conversion between:
-- Mastra/Vercel AI SDK message format
-- Claude Code SDK message format
-- Tool execution results
+### ClaudeCodeProvider
 
-## Examples
-
-### Pre-built Code Assistant Agent
-
-The library includes a pre-configured Code Assistant agent that demonstrates best practices:
+The main class that implements Vercel AI SDK's LanguageModelV1 interface.
 
 ```typescript
-import { codeAssistant } from '@t3ta/claude-code-mastra/mastra/agents/code-assistant';
-
-// Analyze code
-const result = await codeAssistant.generate([
-  {
-    role: 'user',
-    content: 'Analyze this code for improvements: ...'
-  }
-]);
-
-// Generate tests
-const tests = await codeAssistant.generate([
-  {
-    role: 'user',
-    content: 'Generate tests for this function: ...'
-  }
-]);
+class ClaudeCodeProvider implements LanguageModelV1 {
+  constructor(config?: ClaudeCodeProviderConfig)
+  
+  // LanguageModelV1 implementation
+  doGenerate(options): Promise<GenerateResult>
+  doStream(options): Promise<StreamResult>
+}
 ```
 
-The Code Assistant includes two custom tools:
-- **analyze-code**: Analyzes code quality and suggests improvements
-- **generate-tests**: Generates unit tests for code snippets
+#### Configuration Options
 
-Run the example:
+```typescript
+interface ClaudeCodeProviderConfig {
+  modelId?: string;                    // Model identifier
+  claudeCodeOptions?: {                // Claude Code SDK options
+    maxTurns?: number;                 // Max conversation turns (1-100)
+    allowedTools?: string[];           // Allowed Claude Code tools
+    disallowedTools?: string[];        // Disallowed Claude Code tools
+    permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
+    cwd?: string;                      // Working directory
+    timeout?: number;                  // Timeout in milliseconds
+    model?: string;                    // Claude model to use
+    fallbackModel?: string;            // Fallback model
+    appendSystemPrompt?: string;       // Additional system prompt
+    customSystemPrompt?: string;       // Replace system prompt
+    maxThinkingTokens?: number;        // Max thinking tokens
+    mcpServers?: Record<string, McpServerConfig>;
+  };
+  tools?: Record<string, ToolAction>; // Mastra tools
+}
+```
+
+### Utility Classes
+
+#### ToolBridge
+
+Handles integration between Claude Code SDK and Mastra tools.
+
+```typescript
+class ToolBridge {
+  generateSystemPrompt(): string
+  detectToolCall(message: string): { toolName: string; parameters: any } | null
+  executeTool(toolName: string, parameters: any): Promise<ToolExecutionResult>
+  formatToolResult(result: ToolExecutionResult): string
+  getExecutionHistory(): ToolExecutionResult[]
+  clearHistory(): void
+}
+```
+
+#### MessageConverter
+
+Converts between Claude Code SDK messages and Mastra formats.
+
+```typescript
+class MessageConverter {
+  extractPromptFromMessages(messages: any[]): string
+  convertSDKMessageToMastraResponse(messages: SDKMessage[], sessionId: string, startTime: number): MastraResponse
+  convertSDKMessageToStreamChunk(message: SDKMessage): MastraStreamChunk
+  createErrorChunk(error: Error | string, sessionId?: string): MastraStreamChunk
+  createMetadataChunk(metadata: any, sessionId?: string): MastraStreamChunk
+}
+```
+
+#### SessionManager
+
+Manages Claude Code session lifecycle.
+
+```typescript
+class SessionManager {
+  createSession(): SessionInfo
+  getSession(sessionId: string): SessionInfo | undefined
+  updateSession(sessionId: string, updates: Partial<SessionInfo>): void
+  endSession(sessionId: string): void
+  cleanupSession(sessionId: string): void
+}
+```
+
+## 📋 Pre-built Agents & Workflows
+
+### CSV Question Agent
+
+An agent specialized in processing CSV files and generating educational questions.
+
+```typescript
+import { csvQuestionAgent } from '@papaoloba/claude-code-mastra/mastra';
+
+const response = await csvQuestionAgent.generate(
+  'Download this CSV and generate questions: https://example.com/data.csv'
+);
+```
+
+### CSV to Questions Workflow
+
+A complete workflow for CSV processing:
+
+```typescript
+import { mastra } from '@papaoloba/claude-code-mastra/mastra';
+
+const result = await mastra.workflows.csvToQuestionsWorkflow.execute({
+  csvUrl: 'https://example.com/data.csv'
+});
+
+console.log(result.questions);
+```
+
+## 🧪 Testing
+
+The project includes comprehensive test suites:
+
 ```bash
-npm run example:code-assistant
-```
-
-## Architecture
-
-The library follows the official Mastra pattern for custom language model integration:
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│   Mastra Agent  │────▶│ ClaudeCodeProvider│────▶│ Claude Code SDK │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                               │
-                               ▼
-                        ┌──────────────┐
-                        │ ToolBridge   │
-                        │ MessageConv. │
-                        │ SessionMgr.  │
-                        └──────────────┘
-```
-
-### Key Components
-
-1. **ClaudeCodeProvider**: Implements `LanguageModelV1` interface
-   - `doGenerate()`: Non-streaming generation
-   - `doStream()`: Streaming generation with event handling
-
-2. **ToolBridge**: Manages tool integration
-   - Generates system prompts for tools
-   - Detects tool calls in responses
-   - Executes tools and formats results
-
-3. **MessageConverter**: Handles message format conversion
-   - Extracts prompts from message arrays
-   - Cleans Claude Code internal formatting
-   - Converts between frameworks
-
-4. **SessionManager**: Manages session lifecycle
-   - Creates unique sessions
-   - Tracks usage and costs
-   - Handles cleanup
-
-## Testing
-
-The project includes comprehensive tests:
-
-```bash
-# Unit tests
+# Unit tests (mocked)
 npm run test:unit
 
 # Integration tests
 npm run test:integration
 
-# E2E tests (requires Claude Code authentication)
-npm run test:e2e
+# E2E tests (requires Claude Code auth)
+CLAUDE_CODE_E2E_TEST=true npm run test:e2e
 
 # All tests
 npm run test:all
@@ -265,57 +260,67 @@ npm run test:all
 # Watch mode
 npm run test:watch
 
-# Coverage
+# Coverage report
 npm run test:coverage
 ```
 
-## Authentication
+## ⚠️ Security Considerations
 
-Claude Code authentication is required:
-
-```bash
-# Login to Claude Code
-claude login
-
-# Or set via environment variable
-export ANTHROPIC_API_KEY=your_api_key
-```
-
-## Migration from Agent-based Approach
-
-If you were using the previous `ClaudeCodeAgent` class, migrate to the provider approach:
-
-```typescript
-// Old approach
-import { ClaudeCodeAgent } from '@t3ta/claude-code-mastra';
-const agent = new ClaudeCodeAgent({ /* options */ });
-
-// New approach (recommended)
-import { Agent } from '@mastra/core/agent';
-import { ClaudeCodeProvider } from '@t3ta/claude-code-mastra';
-
-const provider = new ClaudeCodeProvider({ /* options */ });
-const agent = new Agent({ model: provider, /* other options */ });
-```
-
-## Security Considerations
-
-⚠️ **Important**: Claude Code SDK tool restrictions (`allowedTools`/`disallowedTools`) may not work as expected. Be cautious with:
-
-- File system operations (Read, Write, Edit)
-- Command execution (Bash)
-- Resource consumption
+**Important**: Claude Code SDK tool restrictions (`allowedTools`/`disallowedTools`) may not work as expected. This can lead to:
+- Unrestricted file system access
+- Arbitrary command execution via Bash tool
+- Resource abuse potential
 
 **Recommendations**:
-- Use Mastra tools instead of Claude Code built-in tools
-- Run in sandboxed environments
-- Validate all inputs
-- Monitor session costs and usage
+1. Use in sandboxed environments
+2. Prefer Mastra tools over Claude Code built-in tools
+3. Implement additional security layers in production
+4. Monitor resource usage and set appropriate timeouts
 
-## License
+## 🔧 Development
+
+### Project Structure
+
+```
+claude-code-mastra/
+├── src/
+│   ├── claude-code-provider.ts    # Main provider implementation
+│   ├── tool-bridge.ts             # Tool integration logic
+│   ├── message-converter.ts       # Message format conversion
+│   ├── utils.ts                   # Utilities and session management
+│   ├── types.ts                   # TypeScript type definitions
+│   └── mastra/                    # Pre-built Mastra components
+│       ├── agents/                # Pre-configured agents
+│       ├── tools/                 # Custom tools
+│       └── workflows/             # Workflow definitions
+├── test/
+│   ├── unit/                      # Unit tests
+│   ├── integration/               # Integration tests
+│   └── e2e/                       # End-to-end tests
+└── examples/                      # Usage examples
+```
+
+### Building
+
+```bash
+# TypeScript compilation
+npm run build
+
+# Type checking
+npm run typecheck
+```
+
+## 📄 License
 
 MIT
 
-## Author
+## 🤝 Contributing
 
-Takahito Mita
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/t3ta/claude-code-mastra)
+- [Claude Code SDK](https://github.com/anthropics/claude-code)
+- [Mastra Framework](https://mastra.ai)
+- [Vercel AI SDK](https://sdk.vercel.ai)
